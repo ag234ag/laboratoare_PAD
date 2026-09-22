@@ -22,49 +22,28 @@ public class Subscriber {
 
     public static void main(String[] args) {
 
-        System.out.println(
-                "=========================================="
-        );
+        System.out.println(" ------ SUBSCRIBER - JAVA ----");
 
-        System.out.println(
-                "          SUBSCRIBER - JAVA"
-        );
-
-        System.out.println(
-                "=========================================="
-        );
-
-        Scanner scanner = new Scanner(
-                System.in
-        );
+        Scanner scanner = new Scanner(System.in);
 
         try {
-
             // =====================================================
             // SUBSCRIBER ID
             // =====================================================
 
-            System.out.print(
-                    "Subscriber ID: "
-            );
+            System.out.print("Subscriber ID: ");
 
-            subscriberId =
-                    scanner.nextLine().trim();
+            subscriberId = scanner.nextLine().trim();
 
             if (subscriberId.isEmpty()) {
-
-                subscriberId =
-                        "java-subscriber-1";
+                subscriberId = "java-subscriber-1";
             }
 
             // =====================================================
             // CONNECT TO BROKER
             // =====================================================
 
-            socket = new Socket(
-                    HOST,
-                    PORT
-            );
+            socket = new Socket(HOST, PORT);
 
             reader = new BufferedReader(
                     new InputStreamReader(
@@ -81,25 +60,21 @@ public class Subscriber {
             );
 
             System.out.println();
-
             System.out.println(
-                    "Conectat la Broker: "
+                    "Connected to Broker: "
                             + HOST
                             + ":"
                             + PORT
             );
 
             // =====================================================
-            // THREAD PENTRU PRIMIREA MESAJELOR
+            // MESSAGE RECEIVER THREAD
             // =====================================================
 
             Thread receiverThread =
-                    new Thread(
-                            Subscriber::receiveMessages
-                    );
+                    new Thread(Subscriber::receiveMessages);
 
             receiverThread.setDaemon(true);
-
             receiverThread.start();
 
             // =====================================================
@@ -107,14 +82,11 @@ public class Subscriber {
             // =====================================================
 
             while (running) {
-
                 printMenu();
 
-                String option =
-                        scanner.nextLine().trim();
+                String option = scanner.nextLine().trim();
 
                 switch (option) {
-
                     case "1":
                         subscribe(scanner);
                         break;
@@ -136,40 +108,31 @@ public class Subscriber {
                         break;
 
                     default:
-                        System.out.println(
-                                "Opțiune invalidă."
-                        );
+                        System.out.println("Invalid option.");
                 }
             }
 
         } catch (ConnectException e) {
-
             System.out.println();
-
             System.out.println(
-                    "Nu se poate realiza conexiunea "
-                            + "cu Brokerul."
+                    "Unable to connect to the Broker."
             );
 
             System.out.println(
-                    "Verifică dacă Brokerul este pornit "
-                            + "pe "
+                    "Check whether the Broker is running on "
                             + HOST
                             + ":"
                             + PORT
             );
 
         } catch (IOException e) {
-
             System.out.println(
-                    "Eroare de rețea: "
+                    "Network error: "
                             + e.getMessage()
             );
 
         } finally {
-
             closeConnection();
-
             scanner.close();
         }
     }
@@ -181,63 +144,31 @@ public class Subscriber {
     private static void printMenu() {
 
         System.out.println();
-
-        System.out.println(
-                "------------------------------------------"
-        );
-
-        System.out.println(
-                "1 - Subscribe la un topic"
-        );
-
-        System.out.println(
-                "2 - Unsubscribe de la un topic"
-        );
-
-        System.out.println(
-                "3 - Afișează topicurile"
-        );
-
-        System.out.println(
-                "4 - Ping Broker"
-        );
-
-        System.out.println(
-                "0 - Ieșire"
-        );
-
-        System.out.println(
-                "------------------------------------------"
-        );
-
-        System.out.print(
-                "Alege opțiunea: "
-        );
+        System.out.println("------------------------------------------");
+        System.out.println("1 - Subscribe to a topic");
+        System.out.println("2 - Unsubscribe from a topic");
+        System.out.println("3 - Show subscribed topics");
+        System.out.println("4 - Ping Broker");
+        System.out.println("0 - Exit");
+        System.out.println("------------------------------------------");
+        System.out.print("Choose an option: ");
     }
 
     // =============================================================
     // SUBSCRIBE
     // =============================================================
 
-    private static void subscribe(
-            Scanner scanner
-    ) {
+    private static void subscribe(Scanner scanner) {
 
         try {
+            System.out.print("Topic: ");
 
-            System.out.print(
-                    "Topic: "
-            );
-
-            String topic =
-                    scanner.nextLine().trim();
+            String topic = scanner.nextLine().trim();
 
             if (topic.isEmpty()) {
-
                 System.out.println(
-                        "Topicul nu poate fi gol."
+                        "Topic cannot be empty."
                 );
-
                 return;
             }
 
@@ -257,14 +188,13 @@ public class Subscriber {
             topics.add(topic);
 
             System.out.println(
-                    "Cerere SUBSCRIBE trimisă: "
+                    "SUBSCRIBE request sent: "
                             + topic
             );
 
         } catch (IOException e) {
-
             System.out.println(
-                    "Eroare la subscribe: "
+                    "Subscribe error: "
                             + e.getMessage()
             );
         }
@@ -274,25 +204,17 @@ public class Subscriber {
     // UNSUBSCRIBE
     // =============================================================
 
-    private static void unsubscribe(
-            Scanner scanner
-    ) {
+    private static void unsubscribe(Scanner scanner) {
 
         try {
+            System.out.print("Topic: ");
 
-            System.out.print(
-                    "Topic: "
-            );
-
-            String topic =
-                    scanner.nextLine().trim();
+            String topic = scanner.nextLine().trim();
 
             if (topic.isEmpty()) {
-
                 System.out.println(
-                        "Topicul nu poate fi gol."
+                        "Topic cannot be empty."
                 );
-
                 return;
             }
 
@@ -312,14 +234,13 @@ public class Subscriber {
             topics.remove(topic);
 
             System.out.println(
-                    "Cerere UNSUBSCRIBE trimisă: "
+                    "UNSUBSCRIBE request sent: "
                             + topic
             );
 
         } catch (IOException e) {
-
             System.out.println(
-                    "Eroare la unsubscribe: "
+                    "Unsubscribe error: "
                             + e.getMessage()
             );
         }
@@ -334,20 +255,15 @@ public class Subscriber {
         System.out.println();
 
         if (topics.isEmpty()) {
-
             System.out.println(
-                    "Nu ești abonat la niciun topic."
+                    "You are not subscribed to any topic."
             );
-
             return;
         }
 
-        System.out.println(
-                "Topicuri:"
-        );
+        System.out.println("Topics:");
 
         for (String topic : topics) {
-
             System.out.println(
                     " - " + topic
             );
@@ -361,19 +277,17 @@ public class Subscriber {
     private static void sendPing() {
 
         try {
-
             sendJson(
                     "{\"action\":\"ping\"}"
             );
 
             System.out.println(
-                    "PING trimis."
+                    "PING sent."
             );
 
         } catch (IOException e) {
-
             System.out.println(
-                    "Eroare la PING: "
+                    "PING error: "
                             + e.getMessage()
             );
         }
@@ -386,7 +300,6 @@ public class Subscriber {
     private static void receiveMessages() {
 
         try {
-
             String line;
 
             while (
@@ -394,24 +307,19 @@ public class Subscriber {
                             &&
                     (line = reader.readLine()) != null
             ) {
-
                 handleBrokerMessage(line);
             }
 
         } catch (IOException e) {
-
             if (running) {
-
                 System.out.println();
-
                 System.out.println(
-                        "Conexiunea cu Brokerul "
-                                + "a fost întreruptă."
+                        "The connection to the Broker "
+                                + "was interrupted."
                 );
             }
 
         } finally {
-
             running = false;
         }
     }
@@ -420,9 +328,7 @@ public class Subscriber {
     // HANDLE MESSAGE FROM BROKER
     // =============================================================
 
-    private static void handleBrokerMessage(
-            String json
-    ) {
+    private static void handleBrokerMessage(String json) {
 
         String action =
                 getJsonString(
@@ -431,15 +337,11 @@ public class Subscriber {
                 );
 
         if (action == null) {
-
             System.out.println();
-
             System.out.println(
-                    "[MESAJ NECUNOSCUT]"
+                    "[UNKNOWN MESSAGE]"
             );
-
             System.out.println(json);
-
             return;
         }
 
@@ -476,46 +378,36 @@ public class Subscriber {
                         );
 
                 System.out.println();
-
                 System.out.println(
                         "=========================================="
                 );
-
                 System.out.println(
-                        "MESAJ NOU"
+                        "NEW MESSAGE"
                 );
-
                 System.out.println(
                         "Message ID : "
                                 + messageId
                 );
-
                 System.out.println(
                         "Topic      : "
                                 + topic
                 );
-
                 System.out.println(
-                        "Conținut   : "
+                        "Content    : "
                                 + content
                 );
-
                 System.out.println(
-                        "Încercarea : "
+                        "Attempt    : "
                                 + attempt
                 );
-
                 System.out.println(
                         "=========================================="
                 );
 
-                // După ce mesajul a fost procesat,
-                // trimitem ACK.
+                // After the message has been processed,
+                // send the ACK.
                 if (messageId != null) {
-
-                    sendAck(
-                            messageId
-                    );
+                    sendAck(messageId);
                 }
 
                 break;
@@ -533,9 +425,8 @@ public class Subscriber {
                         );
 
                 System.out.println();
-
                 System.out.println(
-                        "[BROKER] Abonare confirmată: "
+                        "[BROKER] Subscription confirmed: "
                                 + subscribedTopic
                 );
 
@@ -554,9 +445,8 @@ public class Subscriber {
                         );
 
                 System.out.println();
-
                 System.out.println(
-                        "[BROKER] Dezabonare confirmată: "
+                        "[BROKER] Unsubscription confirmed: "
                                 + unsubscribedTopic
                 );
 
@@ -575,9 +465,8 @@ public class Subscriber {
                         );
 
                 System.out.println();
-
                 System.out.println(
-                        "[BROKER] ACK confirmat pentru: "
+                        "[BROKER] ACK confirmed for: "
                                 + ackId
                 );
 
@@ -590,7 +479,6 @@ public class Subscriber {
             case "pong":
 
                 System.out.println();
-
                 System.out.println(
                         "[BROKER] PONG"
                 );
@@ -610,9 +498,8 @@ public class Subscriber {
                         );
 
                 System.out.println();
-
                 System.out.println(
-                        "[EROARE BROKER] "
+                        "[BROKER ERROR] "
                                 + reason
                 );
 
@@ -621,7 +508,6 @@ public class Subscriber {
             default:
 
                 System.out.println();
-
                 System.out.println(
                         "[BROKER] " + json
                 );
@@ -634,12 +520,9 @@ public class Subscriber {
     // ACK
     // =============================================================
 
-    private static void sendAck(
-            String messageId
-    ) {
+    private static void sendAck(String messageId) {
 
         try {
-
             String json =
                     "{"
                             + "\"action\":\"ack\","
@@ -651,14 +534,13 @@ public class Subscriber {
             sendJson(json);
 
             System.out.println(
-                    "[ACK] Trimis pentru mesajul: "
+                    "[ACK] Sent for message: "
                             + messageId
             );
 
         } catch (IOException e) {
-
             System.out.println(
-                    "Eroare la trimiterea ACK: "
+                    "Error sending ACK: "
                             + e.getMessage()
             );
         }
@@ -673,15 +555,13 @@ public class Subscriber {
     ) throws IOException {
 
         writer.write(json);
-
         writer.write("\n");
-
         writer.flush();
     }
 
     // =============================================================
     // SIMPLE JSON STRING EXTRACTION
-    // Fără biblioteci externe.
+    // WITHOUT EXTERNAL LIBRARIES
     // =============================================================
 
     private static String getJsonString(
@@ -696,7 +576,6 @@ public class Subscriber {
                 json.indexOf(search);
 
         if (keyIndex == -1) {
-
             return null;
         }
 
@@ -707,7 +586,6 @@ public class Subscriber {
                 );
 
         if (colon == -1) {
-
             return null;
         }
 
@@ -718,7 +596,6 @@ public class Subscriber {
                 );
 
         if (firstQuote == -1) {
-
             return null;
         }
 
@@ -739,7 +616,6 @@ public class Subscriber {
             if (escaped) {
 
                 switch (c) {
-
                     case 'n':
                         result.append('\n');
                         break;
@@ -768,15 +644,12 @@ public class Subscriber {
                 escaped = false;
 
             } else if (c == '\\') {
-
                 escaped = true;
 
             } else if (c == '"') {
-
                 return result.toString();
 
             } else {
-
                 result.append(c);
             }
         }
@@ -800,7 +673,6 @@ public class Subscriber {
                 json.indexOf(search);
 
         if (keyIndex == -1) {
-
             return null;
         }
 
@@ -811,7 +683,6 @@ public class Subscriber {
                 );
 
         if (colon == -1) {
-
             return null;
         }
 
@@ -825,7 +696,6 @@ public class Subscriber {
                         json.charAt(start)
                 )
         ) {
-
             start++;
         }
 
@@ -836,19 +706,17 @@ public class Subscriber {
                 end < json.length()
                         &&
                 (
-                    Character.isDigit(
-                            json.charAt(end)
-                    )
-                    ||
-                    json.charAt(end) == '-'
+                        Character.isDigit(
+                                json.charAt(end)
+                        )
+                                ||
+                        json.charAt(end) == '-'
                 )
         ) {
-
             end++;
         }
 
         if (start == end) {
-
             return null;
         }
 
@@ -890,7 +758,7 @@ public class Subscriber {
     }
 
     // =============================================================
-    // CLOSE
+    // CLOSE CONNECTION
     // =============================================================
 
     private static void closeConnection() {
@@ -898,39 +766,29 @@ public class Subscriber {
         running = false;
 
         try {
-
             if (reader != null) {
-
                 reader.close();
             }
-
         } catch (IOException ignored) {
         }
 
         try {
-
             if (writer != null) {
-
                 writer.close();
             }
-
         } catch (IOException ignored) {
         }
 
         try {
-
             if (socket != null) {
-
                 socket.close();
             }
-
         } catch (IOException ignored) {
         }
 
         System.out.println();
-
         System.out.println(
-                "Subscriber închis."
+                "Subscriber closed."
         );
     }
 }

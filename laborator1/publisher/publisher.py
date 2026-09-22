@@ -5,21 +5,14 @@ import uuid
 HOST = "127.0.0.1"
 PORT = 5000
 
-
 def send_json(writer, data):
     """
-    Serializează obiectul Python în JSON și îl trimite brokerului.
-    Fiecare mesaj se termină cu \n deoarece protocolul nostru
-    folosește JSON Lines.
+    Serializes the Python object to JSON and sends it to the Broker.
+    Each message ends with \n because the protocol uses JSON Lines.
     """
-    message = json.dumps(
-        data,
-        ensure_ascii=False
-    )
-
+    message = json.dumps(data, ensure_ascii=False)
     writer.write(message + "\n")
     writer.flush()
-
 
 def main():
     print("=" * 50)
@@ -27,22 +20,20 @@ def main():
     print("=" * 50)
 
     try:
-        # Creăm socket TCP.
+        # Create a TCP socket
         client_socket = socket.socket(
             socket.AF_INET,
             socket.SOCK_STREAM
         )
 
-        # Ne conectăm la Broker.
-        client_socket.connect(
-            (HOST, PORT)
-        )
+        # Connect to the Broker
+        client_socket.connect((HOST, PORT))
 
-        print(f"Conectat la Broker: {HOST}:{PORT}")
+        print(f"Connected to Broker: {HOST}:{PORT}")
         print()
 
-        # Folosim makefile pentru a putea lucra ușor
-        # cu mesaje terminate prin \n.
+        # Use makefile so we can easily work
+        # with messages terminated by \n
         reader = client_socket.makefile(
             "r",
             encoding="utf-8"
@@ -56,45 +47,31 @@ def main():
         while True:
             print()
             print("------------------------------------------")
-            print("1 - Publică mesaj")
-            print("2 - Trimite JSON invalid (test DLQ)")
-            print("0 - Ieșire")
+            print("1 - Publish message")
+            print("2 - Send invalid JSON (DLQ test)")
+            print("0 - Exit")
             print("------------------------------------------")
 
-            option = input(
-                "Alege opțiunea: "
-            ).strip()
+            option = input("Choose an option: ").strip()
 
             # =====================================================
             # PUBLISH
             # =====================================================
 
             if option == "1":
-
-                topic = input(
-                    "Topic: "
-                ).strip()
-
-                content = input(
-                    "Mesaj: "
-                ).strip()
+                topic = input("Topic: ").strip()
+                content = input("Message: ").strip()
 
                 if not topic:
-                    print(
-                        "Eroare: topicul nu poate fi gol."
-                    )
+                    print("Error: topic cannot be empty.")
                     continue
 
                 if not content:
-                    print(
-                        "Eroare: mesajul nu poate fi gol."
-                    )
+                    print("Error: message cannot be empty.")
                     continue
 
-                # ID unic pentru fiecare mesaj.
-                message_id = str(
-                    uuid.uuid4()
-                )
+                # Unique ID for each message.
+                message_id = str(uuid.uuid4())
 
                 message = {
                     "action": "publish",
@@ -104,7 +81,7 @@ def main():
                 }
 
                 print()
-                print("Trimit către Broker:")
+                print("Sending to Broker:")
                 print(
                     json.dumps(
                         message,
@@ -113,28 +90,20 @@ def main():
                     )
                 )
 
-                send_json(
-                    writer,
-                    message
-                )
+                send_json(writer, message)
 
-                # Așteptăm răspunsul Brokerului.
+                # Wait for the Broker response.
                 response_line = reader.readline()
 
                 if not response_line:
-                    print(
-                        "Brokerul a închis conexiunea."
-                    )
+                    print("The Broker closed the connection.")
                     break
 
                 try:
-                    response = json.loads(
-                        response_line
-                    )
+                    response = json.loads(response_line)
 
                     print()
-                    print("Răspuns Broker:")
-
+                    print("Broker response:")
                     print(
                         json.dumps(
                             response,
@@ -143,43 +112,34 @@ def main():
                         )
                     )
 
-                    if (
-                        response.get("action")
-                        == "publish_accepted"
-                    ):
-                        subscribers = response.get(
-                            "subscribers",
-                            0
-                        )
+                    if response.get("action") == "publish_accepted":
+                        subscribers = response.get("subscribers", 0)
 
                         print()
                         print(
-                            f"Mesajul {message_id} "
-                            "a fost acceptat."
+                            f"Message {message_id} "
+                            "was accepted."
                         )
 
                         if subscribers == 0:
                             print(
-                                "Momentan nu există "
-                                "subscriberi pentru acest topic."
+                                "There are currently no subscribers "
+                                "for this topic."
                             )
-
                             print(
-                                "Mesajul rămâne persistent "
-                                "în Broker."
+                                "The message remains persistent "
+                                "in the Broker."
                             )
                         else:
                             print(
-                                f"Subscriberi găsiți: "
-                                f"{subscribers}"
+                                f"Subscribers found: {subscribers}"
                             )
 
                 except json.JSONDecodeError:
                     print(
-                        "Răspuns invalid primit "
-                        "de la Broker:"
+                        "Invalid response received "
+                        "from the Broker:"
                     )
-
                     print(response_line)
 
             # =====================================================
@@ -187,7 +147,6 @@ def main():
             # =====================================================
 
             elif option == "2":
-
                 invalid_message = (
                     '{"action":"publish",'
                     '"topic":"sport",'
@@ -195,76 +154,52 @@ def main():
                 )
 
                 print()
-                print(
-                    "Trimit intenționat JSON invalid:"
-                )
-
+                print("Intentionally sending invalid JSON:")
                 print(invalid_message)
 
-                writer.write(
-                    invalid_message + "\n"
-                )
-
+                writer.write(invalid_message + "\n")
                 writer.flush()
 
                 response_line = reader.readline()
 
                 if not response_line:
-                    print(
-                        "Brokerul a închis conexiunea."
-                    )
+                    print("The Broker closed the connection.")
                     break
 
                 print()
-                print(
-                    "Răspuns Broker:"
-                )
-
-                print(
-                    response_line.strip()
-                )
+                print("Broker response:")
+                print(response_line.strip())
 
             # =====================================================
             # EXIT
             # =====================================================
 
             elif option == "0":
-
-                print(
-                    "Publisher închis."
-                )
-
+                print("Publisher closed.")
                 break
 
             else:
-                print(
-                    "Opțiune invalidă."
-                )
+                print("Invalid option.")
 
         writer.close()
         reader.close()
         client_socket.close()
 
     except ConnectionRefusedError:
-
         print()
         print(
-            "Nu se poate realiza conexiunea "
-            "cu Brokerul."
+            "Unable to connect to the Broker."
         )
-
         print(
-            "Verifică dacă Brokerul este pornit "
-            f"pe {HOST}:{PORT}."
+            "Check whether the Broker is running "
+            f"on {HOST}:{PORT}."
         )
 
     except Exception as error:
-
         print()
         print(
-            f"Eroare Publisher: {error}"
+            f"Publisher error: {error}"
         )
-
 
 if __name__ == "__main__":
     main()
