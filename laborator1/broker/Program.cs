@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 class Program
@@ -9,6 +10,7 @@ class Program
     private const int PORT = 5000;
     private const int MAX_RETRIES = 3;
     private const int RETRY_INTERVAL_SECONDS = 5;
+    private const int ACK_TIMEOUT_SECONDS = 5;
     private const string CONNECTION_STRING =
         "Data Source=broker.db";
     
@@ -17,6 +19,12 @@ class Program
     
     private static readonly ConcurrentDictionary<string, SemaphoreSlim>
         DeliveryLocks = new();
+
+    private static readonly JsonSerializerOptions
+        SerializerOptions = new()
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
     static async Task Main()
     {
         Console.OutputEncoding = Encoding.UTF8;
@@ -162,9 +170,29 @@ class Program
         {
             JsonElement root =
                 document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                Console.WriteLine(
+                    "[INVALID MESSAGE FORMAT]"
+                );
+                await SaveRawDeadLetterAsync(
+                    rawMessage,
+                    "NOT_A_JSON_OBJECT"
+                );
+                await SendJsonAsync(
+                    connection,
+                    new
+                    {
+                        action = "error",
+                        reason = "json_object_required"
+                    }
+                );
+                return;
+            }
             if (!root.TryGetProperty(
                 "action",
-                out JsonElement actionElement))
+                out JsonElement actionElement) ||
+                actionElement.ValueKind != JsonValueKind.String)
             {
                 await SaveRawDeadLetterAsync(
                     rawMessage,
@@ -489,6 +517,25 @@ class Program
             );
         if (!updated)
         {
+            if (await IsDeliveryDeliveredAsync(
+                messageId,
+                connection.SubscriberId))
+            {
+                Console.WriteLine(
+                    $"[DUPLICATE ACK] {messageId} from " +
+                    connection.SubscriberId
+                );
+                await SendJsonAsync(
+                    connection,
+                    new
+                    {
+                        action = "ack_received",
+                        messageId,
+                        duplicate = true
+                    }
+                );
+                return;
+            }
             await SendJsonAsync(
                 connection,
                 new
@@ -955,7 +1002,9 @@ class Program
                 ON m.MessageId = d.MessageId
             WHERE d.MessageId = $messageId
               AND d.SubscriberId = $subscriberId
-              AND d.Status = 'PENDING';
+              AND d.Status = 'PENDING'
+              AND (d.LastAttemptAt IS NULL
+                   OR d.LastAttemptAt <= $cutoff);
             """;
         command.Parameters.AddWithValue(
             "$messageId",
@@ -964,6 +1013,10 @@ class Program
         command.Parameters.AddWithValue(
             "$subscriberId",
             subscriberId
+        );
+        command.Parameters.AddWithValue(
+            "$cutoff",
+            GetAckTimeoutCutoff()
         );
         await using SqliteDataReader reader =
             await command.ExecuteReaderAsync();
@@ -1002,6 +1055,8 @@ class Program
             WHERE d.SubscriberId = $subscriberId
               AND m.Topic = $topic
               AND d.Status = 'PENDING'
+              AND (d.LastAttemptAt IS NULL
+                   OR d.LastAttemptAt <= $cutoff)
             ORDER BY m.CreatedAt;
             """;
         command.Parameters.AddWithValue(
@@ -1011,6 +1066,10 @@ class Program
         command.Parameters.AddWithValue(
             "$topic",
             topic
+        );
+        command.Parameters.AddWithValue(
+            "$cutoff",
+            GetAckTimeoutCutoff()
         );
         await using SqliteDataReader reader =
             await command.ExecuteReaderAsync();
@@ -1096,6 +1155,35 @@ class Program
         int affected =
             await command.ExecuteNonQueryAsync();
         return affected == 1;
+    }
+    private static async Task<bool>
+        IsDeliveryDeliveredAsync(
+            string messageId,
+            string subscriberId)
+    {
+        await using SqliteConnection connection =
+            new SqliteConnection(CONNECTION_STRING);
+        await connection.OpenAsync();
+        await using SqliteCommand command =
+            connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM Deliveries
+            WHERE MessageId = $messageId
+              AND SubscriberId = $subscriberId
+              AND Status = 'DELIVERED';
+            """;
+        command.Parameters.AddWithValue(
+            "$messageId",
+            messageId
+        );
+        command.Parameters.AddWithValue(
+            "$subscriberId",
+            subscriberId
+        );
+        object? result =
+            await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result) > 0;
     }
     // =========================================================
     // UPDATE MESSAGE GLOBAL STATUS
@@ -1338,7 +1426,10 @@ class Program
         object data)
     {
         string json =
-            JsonSerializer.Serialize(data);
+            JsonSerializer.Serialize(
+                data,
+                SerializerOptions
+            );
         await connection.SendLock.WaitAsync();
         try
         {
@@ -1355,6 +1446,12 @@ class Program
     // =========================================================
     // HELPERS
     // =========================================================
+    private static string GetAckTimeoutCutoff()
+    {
+        return DateTime.UtcNow
+            .AddSeconds(-ACK_TIMEOUT_SECONDS)
+            .ToString("O");
+    }
     private static string? GetString(
         JsonElement element,
         string property)

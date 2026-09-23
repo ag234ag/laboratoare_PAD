@@ -16,6 +16,9 @@ public class Subscriber {
     private static final Set<String> topics =
             ConcurrentHashMap.newKeySet();
 
+    private static final Set<String> processedMessageIds =
+            ConcurrentHashMap.newKeySet();
+
     private static String subscriberId;
 
     private static volatile boolean running = true;
@@ -377,6 +380,20 @@ public class Subscriber {
                                 "attempt"
                         );
 
+                if (messageId != null
+                        && !processedMessageIds.add(messageId)) {
+                    System.out.println();
+                    System.out.println(
+                            "[DUPLICATE] Message "
+                                    + messageId
+                                    + " already processed (attempt "
+                                    + attempt
+                                    + "), re-sending ACK."
+                    );
+                    sendAck(messageId);
+                    break;
+                }
+
                 System.out.println();
                 System.out.println(
                         "=========================================="
@@ -466,7 +483,9 @@ public class Subscriber {
 
                 System.out.println();
                 System.out.println(
-                        "[BROKER] ACK confirmed for: "
+                        (json.contains("\"duplicate\":true")
+                                ? "[BROKER] Duplicate ACK ignored for: "
+                                : "[BROKER] ACK confirmed for: ")
                                 + ackId
                 );
 
@@ -634,6 +653,37 @@ public class Subscriber {
 
                     case '\\':
                         result.append('\\');
+                        break;
+
+                    case '/':
+                        result.append('/');
+                        break;
+
+                    case 'b':
+                        result.append('\b');
+                        break;
+
+                    case 'f':
+                        result.append('\f');
+                        break;
+
+                    case 'u':
+                        if (i + 4 >= json.length()) {
+                            return null;
+                        }
+
+                        try {
+                            result.append(
+                                    (char) Integer.parseInt(
+                                            json.substring(i + 1, i + 5),
+                                            16
+                                    )
+                            );
+                        } catch (NumberFormatException e) {
+                            return null;
+                        }
+
+                        i += 4;
                         break;
 
                     default:
