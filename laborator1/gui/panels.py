@@ -1,8 +1,11 @@
 import json
+import sqlite3
 import tkinter as tk
 import uuid
 from datetime import datetime
 from tkinter import ttk
+
+from broker_state import TABLE_COLUMNS
 
 
 def make_table(parent, columns, height=6):
@@ -199,3 +202,48 @@ class SubscriberPanel(RolePanel):
 
     def send_ack(self, message_id):
         self._send({"action": "ack", "messageId": message_id})
+
+
+class StatePanel(ttk.LabelFrame):
+    REFRESH_MS = 1000
+
+    def __init__(self, parent, read_state, db_path):
+        super().__init__(parent, text="Stare broker (broker.db)")
+        self._read_state = read_state
+        self.db_path = tk.StringVar(value=db_path)
+        self.status = tk.StringVar()
+        self.tables = {}
+        header = ttk.Frame(self)
+        header.pack(fill="x", padx=4, pady=4)
+        ttk.Entry(header, textvariable=self.db_path).pack(side="left", fill="x", expand=True)
+        ttk.Label(header, textvariable=self.status).pack(side="left", padx=8)
+        grid = ttk.Frame(self)
+        grid.pack(fill="both", expand=True, padx=4, pady=4)
+        for column, (name, columns) in enumerate(TABLE_COLUMNS.items()):
+            ttk.Label(grid, text=name).grid(row=0, column=column, sticky="w")
+            table = make_table(grid, columns, height=5)
+            table.grid(row=1, column=column, sticky="nsew", padx=2)
+            grid.columnconfigure(column, weight=1)
+            self.tables[name] = table
+        self.refresh()
+        self.after(self.REFRESH_MS, self._tick)
+
+    def refresh(self):
+        try:
+            state = self._read_state(self.db_path.get())
+        except FileNotFoundError:
+            self.status.set("broker.db negasit")
+            return
+        except sqlite3.Error as error:
+            self.status.set(f"broker.db indisponibil: {error}")
+            return
+        self.status.set("ok")
+        for name, rows in state.items():
+            table = self.tables[name]
+            table.delete(*table.get_children())
+            for row in rows:
+                table.insert("", "end", values=row)
+
+    def _tick(self):
+        self.refresh()
+        self.after(self.REFRESH_MS, self._tick)
