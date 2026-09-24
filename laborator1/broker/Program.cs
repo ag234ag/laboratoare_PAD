@@ -68,6 +68,8 @@ class Program
                     client,
                     stream
                 );
+            string remoteEndpoint =
+                client.Client.RemoteEndPoint?.ToString() ?? "unknown";
             while (client.Connected)
             {
                 string? line =
@@ -78,7 +80,7 @@ class Program
                     continue;
                 Console.WriteLine();
                 Console.WriteLine(
-                    $"[RECEIVED] {line}"
+                    $"[RECEIVED from {remoteEndpoint}] {line}"
                 );
                 await ProcessMessageAsync(
                     connection,
