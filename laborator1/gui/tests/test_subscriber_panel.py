@@ -135,3 +135,63 @@ class SubscriberPanelTest(TkTestCase):
         self.assertEqual(panel.cget("text"), "Subscriber 4")
         panel.remove_button.invoke()
         self.assertEqual(removed, [panel])
+
+    def make_panel(self, owner=None):
+        client = FakeClient()
+        panel = SubscriberPanel(self.root, client, self.log, id_owner=lambda panel, sid: owner)
+        return panel, client
+
+    def subscribe_as(self, panel, subscriber_id, topic):
+        panel.subscriber_id.set(subscriber_id)
+        panel.topic.set(topic)
+        panel.subscribe()
+
+    def test_subscribe_with_an_id_owned_by_another_panel_is_blocked(self):
+        panel, client = self.make_panel(owner="Subscriber 2")
+        self.subscribe_as(panel, "S1", "sport")
+        self.assertEqual(client.sent, [])
+        self.assertIn("ERR", self.log.contents())
+        self.assertIn("Subscriber 2", self.log.contents())
+
+    def test_subscribe_with_a_free_id_is_sent(self):
+        panel, client = self.make_panel(owner=None)
+        self.subscribe_as(panel, "S1", "sport")
+        self.assertEqual(len(client.sent), 1)
+
+    def test_same_id_may_subscribe_to_more_topics(self):
+        panel, client = self.make_panel()
+        self.subscribe_as(panel, "S1", "sport")
+        self.subscribe_as(panel, "S1", "news")
+        self.assertEqual(len(client.sent), 2)
+
+    def test_changing_id_while_subscribed_is_blocked(self):
+        panel, client = self.make_panel()
+        self.subscribe_as(panel, "S1", "sport")
+        client.sent.clear()
+        self.subscribe_as(panel, "S2", "news")
+        self.assertEqual(client.sent, [])
+        self.assertIn("Unsubscribe", self.log.contents())
+
+    def test_id_can_change_after_unsubscribing_every_topic(self):
+        panel, client = self.make_panel()
+        self.subscribe_as(panel, "S1", "sport")
+        self.subscribe_as(panel, "S1", "sport")
+        panel.unsubscribe()
+        client.sent.clear()
+        self.subscribe_as(panel, "S2", "news")
+        self.assertEqual([p["subscriberId"] for p in client.sent], ["S2"])
+
+    def test_unsubscribe_is_never_blocked_by_the_id_guard(self):
+        panel, client = self.make_panel(owner="Subscriber 2")
+        panel.subscriber_id.set("S1")
+        panel.topic.set("sport")
+        panel.unsubscribe()
+        self.assertEqual([p["action"] for p in client.sent], ["unsubscribe"])
+
+    def test_active_id_is_none_until_subscribed_and_after_shutdown(self):
+        panel, client = self.make_panel()
+        self.assertIsNone(panel.active_id)
+        self.subscribe_as(panel, "S1", "sport")
+        self.assertEqual(panel.active_id, "S1")
+        panel.shutdown()
+        self.assertIsNone(panel.active_id)

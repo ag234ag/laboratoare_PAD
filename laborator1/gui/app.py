@@ -65,10 +65,18 @@ class App:
         self._counters[role] += 1
         events = queue.Queue()
         client = self._client_factory(events)
-        panel = panel_class(parent, client, self.log, name=f"{role} {self._counters[role]}", on_remove=self.remove)
+        options = {"id_owner": self._owner_of_id} if panel_class is SubscriberPanel else {}
+        panel = panel_class(parent, client, self.log, name=f"{role} {self._counters[role]}",
+                            on_remove=self.remove, **options)
         self._events[panel] = events
         panels.append(panel)
         return panel
+
+    def _owner_of_id(self, requester, subscriber_id):
+        for panel in self.subscribers:
+            if panel is not requester and panel.active_id == subscriber_id:
+                return panel.cget("text")
+        return None
 
     def remove(self, panel):
         panel.shutdown()

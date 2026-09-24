@@ -152,8 +152,10 @@ class PublisherPanel(RolePanel):
 
 
 class SubscriberPanel(RolePanel):
-    def __init__(self, parent, client, log, name="Subscriber", on_remove=None):
+    def __init__(self, parent, client, log, name="Subscriber", on_remove=None, id_owner=None):
         super().__init__(parent, name, client, log, on_remove)
+        self._id_owner = id_owner or (lambda panel, subscriber_id: None)
+        self._active_id = None
         self.subscriber_id = tk.StringVar(value=f"tk-{uuid.uuid4().hex[:4]}")
         self.topic = tk.StringVar()
         self.auto_ack = tk.BooleanVar(value=True)
@@ -187,12 +189,29 @@ class SubscriberPanel(RolePanel):
         if not subscriber_id or not topic:
             self._log_line("ERR", "subscriber ID si topic obligatorii")
             return
+        if action == "subscribe" and not self._may_subscribe(subscriber_id):
+            return
         if not self._send({"action": action, "subscriberId": subscriber_id, "topic": topic}):
             return
         if action == "subscribe":
             self._topics.add(topic)
+            self._active_id = subscriber_id
         else:
             self._topics.discard(topic)
+
+    @property
+    def active_id(self):
+        return self._active_id if self._topics else None
+
+    def _may_subscribe(self, subscriber_id):
+        if self._topics and self._active_id != subscriber_id:
+            self._log_line("ERR", f"ID schimbat de la {self._active_id}: fa Unsubscribe la toate topicurile mai intai")
+            return False
+        owner = self._id_owner(self, subscriber_id)
+        if owner:
+            self._log_line("ERR", f"ID {subscriber_id} este deja folosit de {owner}")
+            return False
+        return True
 
     def shutdown(self):
         subscriber_id = self.subscriber_id.get().strip()

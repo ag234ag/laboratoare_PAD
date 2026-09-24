@@ -130,6 +130,29 @@ class AppTest(unittest.TestCase):
             self.app.add_publisher()
         self.assertGreater(scroll_height(self.app.publisher_scroll), publisher_before)
 
+    def test_second_subscriber_cannot_take_an_id_already_in_use(self):
+        first, second = self.app.subscribers
+        self.subscribe(first, "SAME", "sport")
+        self.clients[2].sent.clear()
+        self.subscribe(second, "SAME", "sport")
+        self.assertEqual(self.clients[2].sent, [])
+        self.assertIn("Subscriber 1", self.app.log.contents())
+
+    def test_id_is_free_again_after_its_owner_is_removed(self):
+        first, second = self.app.subscribers
+        self.subscribe(first, "SAME", "sport")
+        self.app.remove(first)
+        self.clients[2].sent.clear()
+        self.subscribe(second, "SAME", "sport")
+        self.assertEqual([p["action"] for p in self.clients[2].sent], ["subscribe"])
+
+    def test_same_id_typed_but_not_yet_subscribed_does_not_block_the_other(self):
+        first, second = self.app.subscribers
+        first.subscriber_id.set("SAME")
+        self.clients[2].sent.clear()
+        self.subscribe(second, "SAME", "sport")
+        self.assertEqual(len(self.clients[2].sent), 1)
+
     def test_missing_database_does_not_break_startup(self):
         self.assertEqual(self.app.state.status.get(), "broker.db negasit")
 
