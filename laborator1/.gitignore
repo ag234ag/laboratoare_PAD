@@ -5,3 +5,4 @@ obj/
 *.db-wal
 *.class
 Agent\ mesagerie.pdf
+__pycache__/
