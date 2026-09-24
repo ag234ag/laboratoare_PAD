@@ -46,3 +46,8 @@ class TkTestCase(unittest.TestCase):
             self.root.destroy()
         except tk.TclError:
             pass
+
+
+def scroll_height(scrollable):
+    x0, y0, x1, y1 = (int(float(v)) for v in str(scrollable.canvas.cget("scrollregion")).split())
+    return y1 - y0

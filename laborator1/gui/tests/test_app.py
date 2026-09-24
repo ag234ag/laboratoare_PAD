@@ -2,7 +2,7 @@ import tkinter as tk
 import unittest
 
 from app import App
-from support import FakeClient
+from support import FakeClient, scroll_height
 
 
 class AppTest(unittest.TestCase):
@@ -116,6 +116,19 @@ class AppTest(unittest.TestCase):
         self.app.close()
         self.assertEqual([p["action"] for p in self.clients[1].sent], ["unsubscribe"])
         self.assertEqual([p["action"] for p in self.clients[2].sent], ["unsubscribe"])
+
+    def test_scroll_areas_grow_with_more_instances_and_shrink_after_remove(self):
+        before = scroll_height(self.app.subscriber_scroll)
+        added = [self.app.add_subscriber() for _ in range(6)]
+        after_add = scroll_height(self.app.subscriber_scroll)
+        self.assertGreater(after_add, before)
+        for panel in added:
+            self.app.remove(panel)
+        self.assertLess(scroll_height(self.app.subscriber_scroll), after_add)
+        publisher_before = scroll_height(self.app.publisher_scroll)
+        for _ in range(4):
+            self.app.add_publisher()
+        self.assertGreater(scroll_height(self.app.publisher_scroll), publisher_before)
 
     def test_missing_database_does_not_break_startup(self):
         self.assertEqual(self.app.state.status.get(), "broker.db negasit")

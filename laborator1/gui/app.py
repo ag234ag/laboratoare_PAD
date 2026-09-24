@@ -6,6 +6,7 @@ from tkinter import ttk
 from broker_client import BrokerClient
 from broker_state import read_state
 from panels import LogPanel, PublisherPanel, StatePanel, SubscriberPanel
+from scrollable import ScrollableFrame
 
 POLL_MS = 100
 SUBSCRIBER_COLUMNS = 2
@@ -27,15 +28,18 @@ class App:
         ttk.Button(toolbar, text="+ Publisher", command=self.add_publisher).pack(side="left", padx=2)
         ttk.Button(toolbar, text="+ Subscriber", command=self.add_subscriber).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Connect toate", command=self.connect_all).pack(side="left", padx=2)
-        self._publisher_column = ttk.Frame(root)
-        self._subscriber_grid = ttk.Frame(root)
+        self.publisher_scroll = ScrollableFrame(root)
+        self.subscriber_scroll = ScrollableFrame(root)
+        self._publisher_column = self.publisher_scroll.body
+        self._subscriber_grid = self.subscriber_scroll.body
         toolbar.grid(row=0, column=0, columnspan=2, sticky="w", padx=4, pady=4)
-        self._publisher_column.grid(row=1, column=0, sticky="nsew")
-        self._subscriber_grid.grid(row=1, column=1, sticky="nsew")
+        self.publisher_scroll.grid(row=1, column=0, sticky="nsew")
+        self.subscriber_scroll.grid(row=1, column=1, sticky="nsew")
         self.state.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=4, pady=4)
         self.log.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=4, pady=4)
         root.columnconfigure(0, weight=1)
         root.columnconfigure(1, weight=3)
+        root.rowconfigure(1, weight=3)
         root.rowconfigure(2, weight=1)
         root.rowconfigure(3, weight=1)
         for column in range(SUBSCRIBER_COLUMNS):
@@ -49,6 +53,7 @@ class App:
     def add_publisher(self):
         panel = self._add(PublisherPanel, "Publisher", self._publisher_column, self.publishers)
         panel.pack(fill="x", padx=4, pady=4)
+        self.publisher_scroll.refresh()
         return panel
 
     def add_subscriber(self):
@@ -73,11 +78,13 @@ class App:
                 panels.remove(panel)
         panel.destroy()
         self._layout_subscribers()
+        self.publisher_scroll.refresh()
 
     def _layout_subscribers(self):
         for index, panel in enumerate(self.subscribers):
             panel.grid(row=index // SUBSCRIBER_COLUMNS, column=index % SUBSCRIBER_COLUMNS,
                        sticky="nsew", padx=4, pady=4)
+        self.subscriber_scroll.refresh()
 
     def connect_all(self):
         for panel in self.publishers + self.subscribers:
