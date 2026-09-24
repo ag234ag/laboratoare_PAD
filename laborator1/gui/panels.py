@@ -139,3 +139,63 @@ class PublisherPanel(RolePanel):
 
     def send_invalid(self):
         self._send(self.INVALID_JSON)
+
+
+class SubscriberPanel(RolePanel):
+    def __init__(self, parent, client, log):
+        super().__init__(parent, "Subscriber", client, log)
+        self.subscriber_id = tk.StringVar(value="tk-subscriber-1")
+        self.topic = tk.StringVar()
+        self.auto_ack = tk.BooleanVar(value=True)
+        self._rows = {}
+        form = ttk.Frame(self)
+        form.pack(fill="x", padx=4)
+        ttk.Label(form, text="Subscriber ID").grid(row=0, column=0, sticky="w")
+        ttk.Entry(form, textvariable=self.subscriber_id).grid(row=0, column=1, sticky="ew")
+        ttk.Label(form, text="Topic").grid(row=1, column=0, sticky="w")
+        ttk.Entry(form, textvariable=self.topic).grid(row=1, column=1, sticky="ew")
+        form.columnconfigure(1, weight=1)
+        buttons = ttk.Frame(self)
+        buttons.pack(anchor="w", padx=4, pady=4)
+        ttk.Button(buttons, text="Subscribe", command=self.subscribe).pack(side="left")
+        ttk.Button(buttons, text="Unsubscribe", command=self.unsubscribe).pack(side="left", padx=4)
+        ttk.Checkbutton(buttons, text="ACK automat", variable=self.auto_ack).pack(side="left", padx=4)
+        ttk.Button(buttons, text="Trimite ACK", command=self.ack_selected).pack(side="left")
+        self.table = make_table(self, ("messageId", "topic", "content", "attempt"))
+        self.table.pack(fill="both", expand=True, padx=4, pady=4)
+
+    def subscribe(self):
+        self._topic_action("subscribe")
+
+    def unsubscribe(self):
+        self._topic_action("unsubscribe")
+
+    def _topic_action(self, action):
+        subscriber_id = self.subscriber_id.get().strip()
+        topic = self.topic.get().strip()
+        if not subscriber_id or not topic:
+            self._log_line("ERR", "subscriber ID si topic obligatorii")
+            return
+        self._send({"action": action, "subscriberId": subscriber_id, "topic": topic})
+
+    def on_message(self, message):
+        if message.get("action") != "message":
+            return
+        message_id = message.get("messageId")
+        values = (message_id, message.get("topic"), message.get("content"), message.get("attempt"))
+        if message_id in self._rows:
+            self.table.item(self._rows[message_id], values=values)
+        else:
+            self._rows[message_id] = self.table.insert("", "end", values=values)
+        if self.auto_ack.get():
+            self.send_ack(message_id)
+
+    def ack_selected(self):
+        selection = self.table.selection()
+        if not selection:
+            self._log_line("ERR", "selecteaza un mesaj")
+            return
+        self.send_ack(str(self.table.item(selection[0], "values")[0]))
+
+    def send_ack(self, message_id):
+        self._send({"action": "ack", "messageId": message_id})
