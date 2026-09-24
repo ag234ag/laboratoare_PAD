@@ -4,3 +4,4 @@ obj/
 *.db-shm
 *.db-wal
 *.class
+__pycache__/
