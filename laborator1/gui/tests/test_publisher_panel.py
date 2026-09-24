@@ -39,6 +39,29 @@ class PublisherPanelTest(TkTestCase):
         with self.assertRaises(json.JSONDecodeError):
             json.loads(self.client.raw[0])
 
+    def test_missing_topic_button_sends_valid_json_without_topic_field(self):
+        self.panel.content.set("goal")
+        self.panel.send_missing_topic()
+        sent = self.client.sent[0]
+        self.assertEqual(sent["action"], "publish")
+        self.assertNotIn("topic", sent)
+        self.assertEqual(sent["content"], "goal")
+        self.assertEqual(len(sent["messageId"]), 36)
+
+    def test_missing_content_button_sends_valid_json_without_content_field(self):
+        self.panel.topic.set("sport")
+        self.panel.send_missing_content()
+        sent = self.client.sent[0]
+        self.assertEqual(sent["action"], "publish")
+        self.assertEqual(sent["topic"], "sport")
+        self.assertNotIn("content", sent)
+
+    def test_missing_topic_button_works_even_with_blank_topic_field(self):
+        self.panel.topic.set("ignored")
+        self.panel.content.set("c")
+        self.panel.send_missing_topic()
+        self.assertNotIn("topic", self.client.sent[0])
+
     def test_send_failure_is_logged_not_raised(self):
         client = FakeClient(fail_with=ConnectionError("not connected"))
         panel = PublisherPanel(self.root, client, self.log)

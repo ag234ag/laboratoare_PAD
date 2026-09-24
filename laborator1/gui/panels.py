@@ -133,6 +133,8 @@ class PublisherPanel(RolePanel):
         buttons.pack(anchor="w", padx=4, pady=4)
         ttk.Button(buttons, text="Publish", command=self.publish).pack(side="left")
         ttk.Button(buttons, text="Trimite JSON invalid", command=self.send_invalid).pack(side="left", padx=4)
+        ttk.Button(buttons, text="Trimite fara topic", command=self.send_missing_topic).pack(side="left", padx=4)
+        ttk.Button(buttons, text="Trimite fara continut", command=self.send_missing_content).pack(side="left", padx=4)
 
     def publish(self):
         topic = self.topic.get().strip()
@@ -149,6 +151,17 @@ class PublisherPanel(RolePanel):
 
     def send_invalid(self):
         self._send(self.INVALID_JSON)
+
+    def send_missing_topic(self):
+        self._send_raw_publish({"content": self.content.get().strip() or "test"})
+
+    def send_missing_content(self):
+        self._send_raw_publish({"topic": self.topic.get().strip() or "test"})
+
+    def _send_raw_publish(self, extra):
+        payload = {"action": "publish", "messageId": str(uuid.uuid4())}
+        payload.update(extra)
+        self._send(payload)
 
 
 class SubscriberPanel(RolePanel):
