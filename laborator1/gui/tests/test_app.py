@@ -48,6 +48,16 @@ class AppTest(unittest.TestCase):
         self.app.close()
         self.assertEqual([client.disconnects for client in self.clients], [1, 1])
 
+    def test_close_unsubscribes_the_subscriber_before_disconnecting(self):
+        subscriber_client = self.clients[1]
+        self.app.subscriber.subscriber_id.set("S1")
+        self.app.subscriber.topic.set("sport")
+        self.app.subscriber.subscribe()
+        subscriber_client.sent.clear()
+        self.app.close()
+        self.assertEqual([p["action"] for p in subscriber_client.sent], ["unsubscribe"])
+        self.assertEqual(subscriber_client.disconnects, 1)
+
     def test_missing_database_does_not_break_startup(self):
         self.assertEqual(self.app.state.status.get(), "broker.db negasit")
 

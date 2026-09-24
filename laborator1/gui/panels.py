@@ -151,6 +151,7 @@ class SubscriberPanel(RolePanel):
         self.topic = tk.StringVar()
         self.auto_ack = tk.BooleanVar(value=True)
         self._rows = {}
+        self._topics = set()
         form = ttk.Frame(self)
         form.pack(fill="x", padx=4)
         ttk.Label(form, text="Subscriber ID").grid(row=0, column=0, sticky="w")
@@ -179,7 +180,19 @@ class SubscriberPanel(RolePanel):
         if not subscriber_id or not topic:
             self._log_line("ERR", "subscriber ID si topic obligatorii")
             return
-        self._send({"action": action, "subscriberId": subscriber_id, "topic": topic})
+        if not self._send({"action": action, "subscriberId": subscriber_id, "topic": topic}):
+            return
+        if action == "subscribe":
+            self._topics.add(topic)
+        else:
+            self._topics.discard(topic)
+
+    def shutdown(self):
+        subscriber_id = self.subscriber_id.get().strip()
+        for topic in sorted(self._topics):
+            self._send({"action": "unsubscribe", "subscriberId": subscriber_id, "topic": topic})
+        self._topics.clear()
+        self.bar.disconnect()
 
     def on_message(self, message):
         if message.get("action") != "message":

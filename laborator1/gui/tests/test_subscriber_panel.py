@@ -83,3 +83,48 @@ class SubscriberPanelTest(TkTestCase):
     def test_each_panel_gets_its_own_default_subscriber_id(self):
         other = SubscriberPanel(self.root, FakeClient(), self.log)
         self.assertNotEqual(self.panel.subscriber_id.get(), other.subscriber_id.get())
+
+    def test_shutdown_unsubscribes_every_subscribed_topic_then_disconnects(self):
+        self.panel.subscriber_id.set("S1")
+        for topic in ("sport", "news"):
+            self.panel.topic.set(topic)
+            self.panel.subscribe()
+        self.client.sent.clear()
+        self.panel.shutdown()
+        unsubscribed = sorted(p["topic"] for p in self.client.sent if p["action"] == "unsubscribe")
+        self.assertEqual(unsubscribed, ["news", "sport"])
+        self.assertEqual(self.client.disconnects, 1)
+
+    def test_unsubscribed_topic_is_not_unsubscribed_again_on_shutdown(self):
+        self.panel.subscriber_id.set("S1")
+        self.panel.topic.set("sport")
+        self.panel.subscribe()
+        self.panel.unsubscribe()
+        self.client.sent.clear()
+        self.panel.shutdown()
+        self.assertEqual(self.client.sent, [])
+
+    def test_shutdown_without_subscriptions_only_disconnects(self):
+        self.panel.shutdown()
+        self.assertEqual(self.client.sent, [])
+        self.assertEqual(self.client.disconnects, 1)
+
+    def test_shutdown_survives_a_dead_connection(self):
+        client = FakeClient()
+        panel = SubscriberPanel(self.root, client, self.log)
+        panel.subscriber_id.set("S1")
+        panel.topic.set("sport")
+        panel.subscribe()
+        client.fail_with = ConnectionError("not connected")
+        panel.shutdown()
+        self.assertEqual(client.disconnects, 1)
+
+    def test_failed_subscribe_is_not_remembered_for_shutdown(self):
+        client = FakeClient(fail_with=ConnectionError("not connected"))
+        panel = SubscriberPanel(self.root, client, self.log)
+        panel.subscriber_id.set("S1")
+        panel.topic.set("sport")
+        panel.subscribe()
+        client.fail_with = None
+        panel.shutdown()
+        self.assertEqual(client.sent, [])

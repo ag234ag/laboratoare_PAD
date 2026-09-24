@@ -47,8 +47,8 @@ class App:
         self._root.after(POLL_MS, self.poll)
 
     def close(self):
-        self._publisher_client.disconnect()
-        self._subscriber_client.disconnect()
+        self.subscriber.shutdown()
+        self.publisher.bar.disconnect()
         self._root.destroy()
 
 
