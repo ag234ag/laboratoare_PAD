@@ -10,15 +10,15 @@ TABLE_COLUMNS = {
 _QUERIES = {
     "Messages": (
         "SELECT substr(MessageId, 1, 8), Topic, Content, Status "
-        "FROM Messages ORDER BY CreatedAt"
+        "FROM Messages ORDER BY CreatedAt DESC"
     ),
     "Deliveries": (
         "SELECT substr(MessageId, 1, 8), SubscriberId, Status, RetryCount, COALESCE(LastError, '') "
-        "FROM Deliveries ORDER BY rowid"
+        "FROM Deliveries ORDER BY rowid DESC"
     ),
     "DeadLetters": (
         "SELECT COALESCE(substr(MessageId, 1, 8), ''), COALESCE(SubscriberId, ''), Reason, RetryCount "
-        "FROM DeadLetters ORDER BY Id"
+        "FROM DeadLetters ORDER BY Id DESC"
     ),
 }
 

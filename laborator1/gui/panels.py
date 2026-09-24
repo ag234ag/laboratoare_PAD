@@ -147,7 +147,7 @@ class PublisherPanel(RolePanel):
 class SubscriberPanel(RolePanel):
     def __init__(self, parent, client, log):
         super().__init__(parent, "Subscriber", client, log)
-        self.subscriber_id = tk.StringVar(value="tk-subscriber-1")
+        self.subscriber_id = tk.StringVar(value=f"tk-{uuid.uuid4().hex[:4]}")
         self.topic = tk.StringVar()
         self.auto_ack = tk.BooleanVar(value=True)
         self._rows = {}
@@ -189,7 +189,7 @@ class SubscriberPanel(RolePanel):
         if message_id in self._rows:
             self.table.item(self._rows[message_id], values=values)
         else:
-            self._rows[message_id] = self.table.insert("", "end", values=values)
+            self._rows[message_id] = self.table.insert("", 0, values=values)
         if self.auto_ack.get():
             self.send_ack(message_id)
 

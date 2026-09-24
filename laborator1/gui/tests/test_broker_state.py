@@ -47,10 +47,16 @@ class BrokerStateTest(unittest.TestCase):
     def test_rows_are_truncated_ids_and_never_none(self):
         self.create_db()
         state = read_state(str(self.path))
-        self.assertEqual(state["Messages"][0], ("aaaaaaaa", "sport", "salut ăț", "DELIVERED"))
-        self.assertEqual(state["Deliveries"][1], ("bbbbbbbb", "S2", "PENDING", 2, "boom"))
-        self.assertEqual(state["Deliveries"][0][4], "")
+        self.assertEqual(state["Messages"][1], ("aaaaaaaa", "sport", "salut ăț", "DELIVERED"))
+        self.assertEqual(state["Deliveries"][0], ("bbbbbbbb", "S2", "PENDING", 2, "boom"))
+        self.assertEqual(state["Deliveries"][1][4], "")
         self.assertEqual(state["DeadLetters"][0], ("", "", "INVALID_JSON", 0))
+
+    def test_newest_rows_come_first(self):
+        self.create_db()
+        state = read_state(str(self.path))
+        self.assertEqual(state["Messages"][0][0], "bbbbbbbb")
+        self.assertEqual(state["Deliveries"][0][0], "bbbbbbbb")
 
     def test_missing_file_raises_file_not_found(self):
         with self.assertRaises(FileNotFoundError):

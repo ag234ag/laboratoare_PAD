@@ -74,3 +74,12 @@ class SubscriberPanelTest(TkTestCase):
         panel = SubscriberPanel(self.root, client, self.log)
         panel.handle(("message", dict(MESSAGE)))
         self.assertIn("not connected", self.log.contents())
+
+    def test_newest_message_is_listed_first(self):
+        self.panel.handle(("message", dict(MESSAGE)))
+        self.panel.handle(("message", dict(MESSAGE, messageId="m-2")))
+        self.assertEqual([row[0] for row in self.rows()], ["m-2", "m-1"])
+
+    def test_each_panel_gets_its_own_default_subscriber_id(self):
+        other = SubscriberPanel(self.root, FakeClient(), self.log)
+        self.assertNotEqual(self.panel.subscriber_id.get(), other.subscriber_id.get())
