@@ -6,8 +6,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class Subscriber {
 
-    private static final String HOST = "127.0.0.1";
-    private static final int PORT = 5000;
+    private static String HOST = "127.0.0.1";
+    private static int PORT = 5000;
 
     private static Socket socket;
     private static BufferedReader reader;
@@ -24,6 +24,18 @@ public class Subscriber {
     private static volatile boolean running = true;
 
     public static void main(String[] args) {
+
+        if (args.length >= 1) {
+            HOST = args[0];
+        }
+
+        if (args.length >= 2) {
+            try {
+                PORT = Integer.parseInt(args[1]);
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid port '" + args[1] + "', using default " + PORT);
+            }
+        }
 
         System.out.println(" ------ SUBSCRIBER - JAVA ----");
 

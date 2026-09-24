@@ -1,9 +1,15 @@
+import argparse
 import socket
 import json
 import uuid
 
-HOST = "127.0.0.1"
-PORT = 5000
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Publisher client")
+    parser.add_argument("--host", default="127.0.0.1", help="Broker host/IP (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=5000, help="Broker port (default: 5000)")
+    return parser.parse_args()
+
 
 def send_json(writer, data):
     """
@@ -15,6 +21,10 @@ def send_json(writer, data):
     writer.flush()
 
 def main():
+    args = parse_args()
+    HOST = args.host
+    PORT = args.port
+
     print("=" * 50)
     print("          PUBLISHER - PYTHON")
     print("=" * 50)

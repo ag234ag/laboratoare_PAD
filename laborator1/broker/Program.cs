@@ -32,10 +32,10 @@ class Program
         await InitializeDatabaseAsync();
         Console.WriteLine("The SQLite database is ready");
         TcpListener listener =
-            new TcpListener(IPAddress.Loopback, PORT);
+            new TcpListener(IPAddress.Any, PORT);
         listener.Start();
         Console.WriteLine(
-            $"Broker started on 127.0.0.1:{PORT}"
+            $"Broker started on 0.0.0.0:{PORT}"
         );
         Console.WriteLine("Waiting for connections...");
         Console.WriteLine();
