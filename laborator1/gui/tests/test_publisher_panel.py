@@ -79,3 +79,15 @@ class PublisherPanelTest(TkTestCase):
         self.panel.bar.disconnect()
         self.assertEqual(self.panel.bar.status.get(), "deconectat")
         self.assertEqual(self.client.disconnects, 1)
+
+    def test_panel_uses_given_name_and_remove_button_calls_back(self):
+        removed = []
+        panel = PublisherPanel(self.root, FakeClient(), self.log, name="Publisher 7", on_remove=removed.append)
+        self.assertEqual(panel.cget("text"), "Publisher 7")
+        panel.remove_button.invoke()
+        self.assertEqual(removed, [panel])
+
+    def test_shutdown_disconnects_the_client(self):
+        self.panel.shutdown()
+        self.assertEqual(self.client.disconnects, 1)
+        self.assertEqual(self.panel.bar.status.get(), "deconectat")

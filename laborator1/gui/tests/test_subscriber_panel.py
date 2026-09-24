@@ -128,3 +128,10 @@ class SubscriberPanelTest(TkTestCase):
         client.fail_with = None
         panel.shutdown()
         self.assertEqual(client.sent, [])
+
+    def test_panel_uses_given_name_and_remove_button_calls_back(self):
+        removed = []
+        panel = SubscriberPanel(self.root, FakeClient(), self.log, name="Subscriber 4", on_remove=removed.append)
+        self.assertEqual(panel.cget("text"), "Subscriber 4")
+        panel.remove_button.invoke()
+        self.assertEqual(removed, [panel])

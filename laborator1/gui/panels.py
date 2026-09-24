@@ -69,13 +69,20 @@ class ConnectionBar(ttk.Frame):
 
 
 class RolePanel(ttk.LabelFrame):
-    def __init__(self, parent, role, client, log):
+    def __init__(self, parent, role, client, log, on_remove=None):
         super().__init__(parent, text=role)
         self._role = role
         self._client = client
         self._log = log
         self.bar = ConnectionBar(self, client, lambda text: self._log.write(f"[{role}] {text}"))
         self.bar.pack(anchor="w", padx=4, pady=4)
+        self.remove_button = None
+        if on_remove is not None:
+            self.remove_button = ttk.Button(self.bar, text="Remove", command=lambda: on_remove(self))
+            self.remove_button.pack(side="left", padx=4)
+
+    def shutdown(self):
+        self.bar.disconnect()
 
     def _log_line(self, tag, text):
         self._log.write(f"[{self._role}] {tag} {text}")
@@ -111,8 +118,8 @@ class RolePanel(ttk.LabelFrame):
 class PublisherPanel(RolePanel):
     INVALID_JSON = '{"action":"publish","topic":"sport","content":'
 
-    def __init__(self, parent, client, log):
-        super().__init__(parent, "Publisher", client, log)
+    def __init__(self, parent, client, log, name="Publisher", on_remove=None):
+        super().__init__(parent, name, client, log, on_remove)
         self.topic = tk.StringVar()
         self.content = tk.StringVar()
         form = ttk.Frame(self)
@@ -145,8 +152,8 @@ class PublisherPanel(RolePanel):
 
 
 class SubscriberPanel(RolePanel):
-    def __init__(self, parent, client, log):
-        super().__init__(parent, "Subscriber", client, log)
+    def __init__(self, parent, client, log, name="Subscriber", on_remove=None):
+        super().__init__(parent, name, client, log, on_remove)
         self.subscriber_id = tk.StringVar(value=f"tk-{uuid.uuid4().hex[:4]}")
         self.topic = tk.StringVar()
         self.auto_ack = tk.BooleanVar(value=True)
@@ -165,7 +172,7 @@ class SubscriberPanel(RolePanel):
         ttk.Button(buttons, text="Unsubscribe", command=self.unsubscribe).pack(side="left", padx=4)
         ttk.Checkbutton(buttons, text="ACK automat", variable=self.auto_ack).pack(side="left", padx=4)
         ttk.Button(buttons, text="Trimite ACK", command=self.ack_selected).pack(side="left")
-        self.table = make_table(self, ("messageId", "topic", "content", "attempt"))
+        self.table = make_table(self, ("messageId", "topic", "content", "attempt"), height=4)
         self.table.pack(fill="both", expand=True, padx=4, pady=4)
 
     def subscribe(self):
