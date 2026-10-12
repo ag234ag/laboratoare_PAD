@@ -1,0 +1,10 @@
+bin/
+obj/
+*.db
+*.db-shm
+*.db-wal
+__pycache__/
+.venv/
+.pytest_cache/
+publisher/generated/
+subscriber/target/

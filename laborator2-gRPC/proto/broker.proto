@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package pad.broker.v1;
+
+option csharp_namespace = "Broker.Contracts";
+option java_package = "md.utm.pad.broker.grpc";
+option java_multiple_files = true;
+
+service MessageBroker {
+  rpc Publish(PublishRequest) returns (PublishReply);
+  rpc Subscribe(SubscriptionRequest) returns (SubscriptionReply);
+  rpc Unsubscribe(SubscriptionRequest) returns (SubscriptionReply);
+  rpc Listen(ListenRequest) returns (stream DeliveredMessage);
+  rpc Ack(AckRequest) returns (AckReply);
+  rpc Ping(PingRequest) returns (PingReply);
+  rpc GetState(StateRequest) returns (BrokerState);
+}
+
+message PublishRequest {
+  string message_id = 1;
+  string topic = 2;
+  string content = 3;
+}
+
+message PublishReply {
+  string message_id = 1;
+  string topic = 2;
+  int32 subscribers = 3;
+}
+
+message SubscriptionRequest {
+  string subscriber_id = 1;
+  string topic = 2;
+}
+
+message SubscriptionReply {
+  string subscriber_id = 1;
+  string topic = 2;
+}
+
+message ListenRequest {
+  string subscriber_id = 1;
+}
+
+message DeliveredMessage {
+  string message_id = 1;
+  string topic = 2;
+  string content = 3;
+  int32 attempt = 4;
+  int32 max_attempts = 5;
+}
+
+message AckRequest {
+  string subscriber_id = 1;
+  string message_id = 2;
+}
+
+message AckReply {
+  string message_id = 1;
+  bool duplicate = 2;
+}
+
+message PingRequest {}
+
+message PingReply {
+  string server_time_utc = 1;
+  string storage_mode = 2;
+}
+
+message StateRequest {
+  int32 limit = 1;
+}
+
+message BrokerState {
+  string storage_mode = 1;
+  repeated MessageRecord messages = 2;
+  repeated DeliveryRecord deliveries = 3;
+  repeated DeadLetterRecord dead_letters = 4;
+  repeated SubscriptionRecord subscriptions = 5;
+  repeated string online_subscribers = 6;
+}
+
+message MessageRecord {
+  string message_id = 1;
+  string topic = 2;
+  string content = 3;
+  string status = 4;
+  string created_at_utc = 5;
+}
+
+message DeliveryRecord {
+  string message_id = 1;
+  string subscriber_id = 2;
+  string status = 3;
+  int32 retry_count = 4;
+  string last_error = 5;
+}
+
+message DeadLetterRecord {
+  int64 id = 1;
+  string message_id = 2;
+  string subscriber_id = 3;
+  string topic = 4;
+  string raw_payload = 5;
+  string reason = 6;
+  int32 retry_count = 7;
+  string created_at_utc = 8;
+}
+
+message SubscriptionRecord {
+  string subscriber_id = 1;
+  string topic = 2;
+}
