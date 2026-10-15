@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from tests.support import make_root
 from ui.widgets import ConnectionBar, LogView, TableView
@@ -53,6 +54,26 @@ class TableViewTest(unittest.TestCase):
         table.replace([("b", ("2", "y")), ("a", ("1", "x"))])
         self.assertEqual([("2", "y"), ("1", "x")], table.rows())
         self.assertEqual("a", table.selected_key())
+
+    def test_replace_with_identical_rows_keeps_rows_and_selection_without_touching_items(self):
+        table = self.make()
+        rows = [("a", ("1", "x")), ("b", ("2", "y"))]
+        table.replace(rows)
+        table.select("b")
+        with mock.patch.object(table._tree, "item", wraps=table._tree.item) as item:
+            table.replace(rows)
+        item.assert_not_called()
+        self.assertEqual([("1", "x"), ("2", "y")], table.rows())
+        self.assertEqual("b", table.selected_key())
+
+    def test_replace_updates_only_the_rows_that_changed(self):
+        table = self.make()
+        table.replace([("a", ("1", "x")), ("b", ("2", "y"))])
+        with mock.patch.object(table._tree, "item", wraps=table._tree.item) as item:
+            table.replace([("a", ("1", "x")), ("b", ("2", "yy"))])
+        self.assertEqual(1, item.call_count)
+        self.assertEqual("b", item.call_args.args[0])
+        self.assertEqual([("1", "x"), ("2", "yy")], table.rows())
 
     def test_clear_removes_all_rows_and_selection(self):
         table = self.make()

@@ -48,9 +48,11 @@ class TableView(ttk.Frame):
                 self._tree.delete(key)
                 self._values.pop(key, None)
         for index, (key, values) in enumerate(rows):
+            previous = self._values.get(key)
             self._values[key] = tuple(str(value) for value in values)
             if self._tree.exists(key):
-                self._tree.item(key, values=self._values[key])
+                if previous != self._values[key]:
+                    self._tree.item(key, values=self._values[key])
                 self._tree.move(key, "", index)
             else:
                 self._tree.insert("", index, iid=key, values=self._values[key])
