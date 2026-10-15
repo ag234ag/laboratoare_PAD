@@ -24,6 +24,7 @@ class BrokerApp:
         self._gateway = None
         self._poller = None
         self._last_state_error = None
+        self._stop_requested = False
         root.title("Broker gRPC")
         self.port = tk.StringVar(value="50051")
         self.storage = tk.StringVar(value="persistent")
@@ -85,18 +86,22 @@ class BrokerApp:
         except OSError as error:
             self.console.append(f"Nu pot porni brokerul (este dotnet instalat?): {error}")
             return
+        self._stop_requested = False
         self._stop_polling()
         self._gateway = BrokerGateway("127.0.0.1", int(options.port))
         self.status.set(STARTING)
         self._set_controls(running=True)
-        self._calls.submit("ready", wait_until_ready, self._gateway.ping, lambda: self._process.running,
+        process = self._process
+        self._calls.submit("ready", wait_until_ready, self._gateway.ping, lambda: process.running,
                            context=self._gateway)
 
     def stop(self):
+        self._stop_requested = True
         self._halt_poller()
         self._stop_process()
 
     def close(self):
+        self._stop_requested = True
         self._stop_polling()
         self._stop_process()
         self._root.destroy()
@@ -118,7 +123,7 @@ class BrokerApp:
         handlers[kind](payload)
 
     def _on_ready(self, outcome):
-        if outcome.context is not self._gateway:
+        if outcome.context is not self._gateway or self._stop_requested:
             return
         if outcome.ok and outcome.value:
             self.status.set("Running")
@@ -131,7 +136,7 @@ class BrokerApp:
 
     def _on_exited(self, code):
         self._stop_polling()
-        failed = self.status.get() in (STARTING, FAILED)
+        failed = not self._stop_requested and self.status.get() in (STARTING, FAILED)
         self.status.set(f"{FAILED} (cod {code})" if failed else f"Oprit (cod {code})")
         self.console.append(f"Procesul brokerului s-a oprit (cod {code}).")
         self._set_controls(running=False)

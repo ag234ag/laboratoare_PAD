@@ -2,12 +2,13 @@ import time
 import tkinter as tk
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from broker_app import BrokerApp
 from core.broker_process import PortInUseError
 from core.gateway import broker_pb2
 from tests.fake_broker import RunningFakeBroker
-from tests.support import make_root, pump, release_on_cleanup
+from tests.support import make_root, pump, release_on_cleanup, unused_port
 
 
 class FakeProcess:
@@ -137,6 +138,44 @@ class BrokerAppTest(unittest.TestCase):
         self.process.bus.post("exited", 1)
         pump(self.root, lambda: self.app.status.get().startswith("Esuat"), timeout=10, message="esuat")
         self.assertEqual("Esuat (cod 1)", self.app.status.get())
+
+    def test_stop_while_starting_is_shown_as_stopped(self):
+        self.app.port.set(str(unused_port()))
+        self.app.start()
+        self.assertEqual("Porneste...", self.app.status.get())
+        self.app.stop()
+        pump(self.root, lambda: self.app.status.get().startswith("Oprit"), timeout=10, message="oprit")
+        self.settle(1.2)
+        self.assertEqual("Oprit (cod 0)", self.app.status.get())
+        self.assertNotIn("nu a raspuns", self.app.console.contents())
+
+    def test_close_while_starting_marks_the_stop_as_requested(self):
+        self.app.port.set(str(unused_port()))
+        self.app.start()
+        self.app.close()
+        self.assertTrue(self.app._stop_requested)
+
+    def test_start_clears_the_stop_request(self):
+        self.app.port.set(str(unused_port()))
+        self.app.start()
+        self.app.stop()
+        pump(self.root, lambda: self.app.status.get().startswith("Oprit"), timeout=10, message="oprit")
+        self.app.start()
+        self.assertFalse(self.app._stop_requested)
+
+    def test_readiness_check_does_not_capture_the_app(self):
+        captured = []
+
+        def fake_wait(ping, running, **kwargs):
+            captured.append(running)
+            return True
+
+        with mock.patch("broker_app.wait_until_ready", fake_wait):
+            self.app.start()
+            pump(self.root, lambda: captured, message="verificare pornire")
+        closure = [cell.cell_contents for cell in (captured[0].__closure__ or ())]
+        self.assertNotIn(self.app, closure)
+        self.assertIn(self.process, closure)
 
     def test_state_error_is_logged_once(self):
         self.start_and_wait()
