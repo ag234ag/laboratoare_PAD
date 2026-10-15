@@ -4,12 +4,13 @@ import uuid
 from tkinter import ttk
 
 from core import publish_rules
-from core.events import BackgroundCalls, EventBus, TkPump
+from core.events import BackgroundCalls, EventBus, TaggedBus, TkPump
 from core.gateway import BrokerGateway, describe_error
 from core.listener import Listener
 from core.received_messages import ReceivedMessages
 from ui.widgets import ConnectionBar, LogView, TableView
 
+TOPICS_EMPTY_TEXT = "Topicuri sesiune: -"
 RECEIVED_COLUMNS = [("MessageId", 250), ("Topic", 90), ("Continut", 200), ("Incercare", 70), ("Stare", 190)]
 
 
@@ -29,7 +30,7 @@ class ReceiverApp:
         self.subscriber_id = tk.StringVar(value=f"gui-{uuid.uuid4().hex[:4]}")
         self.topic = tk.StringVar()
         self.auto_ack = tk.BooleanVar(value=True)
-        self.topics_text = tk.StringVar(value="Topicuri: -")
+        self.topics_text = tk.StringVar(value=TOPICS_EMPTY_TEXT)
         form = ttk.Frame(root)
         form.pack(fill="x", padx=6)
         ttk.Label(form, text="Subscriber ID").grid(row=0, column=0, sticky="w")
@@ -67,6 +68,7 @@ class ReceiverApp:
             self.log.append(str(error))
             return
         self._drop_connection()
+        self._set_actions(False)
         gateway = BrokerGateway(host, port)
         self._gateway = gateway
         self._active_id = subscriber_id
@@ -106,13 +108,13 @@ class ReceiverApp:
             self.log.append("Nu esti conectat.")
             return
         self._calls.submit("subscription", getattr(self._gateway, name), self._active_id, topic,
-                           context=(name, topic))
+                           context=(self._gateway, name, topic))
 
     def _send_ack(self, message_id):
         if self._gateway is None:
             self.log.append("Nu esti conectat.")
             return
-        self._calls.submit("ack", self._gateway.ack, self._active_id, message_id, context=message_id)
+        self._calls.submit("ack", self._gateway.ack, self._active_id, message_id, context=(self._gateway, message_id))
 
     def _handle(self, kind, payload):
         handlers = {
@@ -134,21 +136,27 @@ class ReceiverApp:
             self.bar.set_connected(False)
             self.bar.set_status("Deconectat")
             return
-        self._listener = Listener(self._gateway, self._bus)
+        self._listener = Listener(self._gateway, TaggedBus(self._bus, self._gateway))
         self._listener.start(self._active_id)
         self.bar.set_connected(True)
         self.bar.set_status(f"Listen ca '{self._active_id}'")
         self._set_actions(True)
         self.log.append(f"Listen deschis ca '{self._active_id}'")
 
-    def _on_message(self, delivered):
+    def _on_message(self, payload):
+        tag, delivered = payload
+        if tag is not self._gateway:
+            return
         item = self._received.register(delivered)
         self.table.upsert(item.message_id, item.row())
         self.log.append(f"[PRIMIT] {item.message_id} topic={item.topic} incercarea {item.attempt}/{item.max_attempts}")
         if self.auto_ack.get():
             self._send_ack(item.message_id)
 
-    def _on_listen_closed(self, closed):
+    def _on_listen_closed(self, payload):
+        tag, closed = payload
+        if tag is not self._gateway:
+            return
         self.log.append(closed.text())
         self._drop_connection()
         self.bar.set_connected(False)
@@ -156,7 +164,9 @@ class ReceiverApp:
         self._set_actions(False)
 
     def _on_subscription(self, outcome):
-        name, topic = outcome.context
+        gateway, name, topic = outcome.context
+        if gateway is not self._gateway:
+            return
         if not outcome.ok:
             self.log.append(f"{name} esuat pentru '{topic}': {describe_error(outcome.error)}")
             return
@@ -164,11 +174,13 @@ class ReceiverApp:
             self._topics.add(topic)
         else:
             self._topics.discard(topic)
-        self.topics_text.set(f"Topicuri: {', '.join(sorted(self._topics)) or '-'}")
+        self.topics_text.set(f"Topicuri sesiune: {', '.join(sorted(self._topics)) or '-'}")
         self.log.append(f"[BROKER] {name} confirmat: {topic}")
 
     def _on_ack(self, outcome):
-        message_id = outcome.context
+        gateway, message_id = outcome.context
+        if gateway is not self._gateway:
+            return
         if not outcome.ok:
             self.log.append(f"ACK esuat pentru {message_id}: {describe_error(outcome.error)}")
             return
@@ -178,6 +190,8 @@ class ReceiverApp:
         self.log.append(f"[ACK] {message_id}{' (duplicat)' if outcome.value.duplicate else ''}")
 
     def _drop_connection(self):
+        self._topics.clear()
+        self.topics_text.set(TOPICS_EMPTY_TEXT)
         listener, self._listener = self._listener, None
         if listener is not None:
             listener.stop()

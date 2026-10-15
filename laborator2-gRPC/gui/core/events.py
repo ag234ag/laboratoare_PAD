@@ -30,6 +30,15 @@ class EventBus:
                 return items
 
 
+class TaggedBus:
+    def __init__(self, bus, tag):
+        self._bus = bus
+        self._tag = tag
+
+    def post(self, kind, payload=None):
+        self._bus.post(kind, (self._tag, payload))
+
+
 class BackgroundCalls:
     def __init__(self, bus):
         self._bus = bus

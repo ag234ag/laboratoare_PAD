@@ -2,7 +2,7 @@ import time
 import types
 import unittest
 
-from core.events import BackgroundCalls, EventBus, Outcome, TkPump
+from core.events import BackgroundCalls, EventBus, Outcome, TaggedBus, TkPump
 
 
 def collect(bus, count, timeout=2):
@@ -43,6 +43,25 @@ class EventBusTest(unittest.TestCase):
         bus.post("b")
         self.assertEqual([("a", 1), ("b", None)], bus.drain())
         self.assertEqual([], bus.drain())
+
+
+class TaggedBusTest(unittest.TestCase):
+    def test_post_wraps_the_payload_with_the_tag(self):
+        bus = EventBus()
+        tag = object()
+        TaggedBus(bus, tag).post("message", "payload")
+        self.assertEqual([("message", (tag, "payload"))], bus.drain())
+
+    def test_post_without_payload_keeps_the_tag(self):
+        bus = EventBus()
+        TaggedBus(bus, "t").post("closed")
+        self.assertEqual([("closed", ("t", None))], bus.drain())
+
+    def test_each_tagged_bus_marks_its_own_events(self):
+        bus = EventBus()
+        TaggedBus(bus, "old").post("m", 1)
+        TaggedBus(bus, "new").post("m", 2)
+        self.assertEqual([("m", ("old", 1)), ("m", ("new", 2))], bus.drain())
 
 
 class BackgroundCallsTest(unittest.TestCase):

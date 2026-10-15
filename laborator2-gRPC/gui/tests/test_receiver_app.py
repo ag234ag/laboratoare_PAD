@@ -1,3 +1,4 @@
+import time
 import unittest
 
 import grpc
@@ -5,7 +6,7 @@ import grpc
 from core.gateway import broker_pb2
 from receiver_app import ReceiverApp
 from tests.fake_broker import RunningFakeBroker
-from tests.support import make_root, pump, release_on_cleanup
+from tests.support import FakeRpcError, make_root, pump, release_on_cleanup
 
 
 def delivered(message_id, content="salut", attempt=1):
@@ -109,6 +110,100 @@ class ReceiverAppTest(unittest.TestCase):
         pump(self.root, lambda: "inlocuita" in self.app.log.contents(), message="inlocuita")
         self.assertEqual("Deconectat", self.app.bar.status.get())
 
+    def wait_for_undelivered_events(self, count=1):
+        deadline = time.monotonic() + 5
+        while self.app._bus._queue.qsize() < count and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(count, self.app._bus._queue.qsize())
+
+    def settle(self, seconds=0.4):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            self.root.update()
+            time.sleep(0.02)
+
+    def action_states(self):
+        return {str(button.cget("state")) for button in self.app._actions}
+
+    def test_stream_closed_by_broker_disables_actions_and_allows_a_working_reconnect(self):
+        self.connect()
+        self.fake.servicer.finish_listen.set()
+        pump(self.root, lambda: self.app.bar.status.get() == "Deconectat", message="deconectat")
+        self.assertEqual({"disabled"}, self.action_states())
+        self.assertEqual("normal", str(self.app.bar.connect_button.cget("state")))
+        self.fake.servicer.finish_listen.clear()
+        self.app.auto_ack.set(False)
+        self.fake.servicer.listen_messages = [delivered("m1")]
+        self.connect()
+        self.assertEqual({"normal"}, self.action_states())
+        pump(self.root, lambda: len(self.app.table.rows()) == 1, message="mesaj dupa reconectare")
+
+    def test_connect_disables_actions_until_the_new_connection_is_confirmed(self):
+        self.connect()
+        self.assertEqual({"normal"}, self.action_states())
+        self.app.connect()
+        self.assertEqual({"disabled"}, self.action_states())
+        self.assertEqual("Se conecteaza...", self.app.bar.status.get())
+
+    def test_late_ack_result_of_an_old_gateway_does_not_change_the_row(self):
+        self.app.auto_ack.set(False)
+        self.fake.servicer.listen_messages = [delivered("m1")]
+        self.connect()
+        pump(self.root, lambda: len(self.app.table.rows()) == 1, message="primit")
+        self.fake.servicer.listen_messages = []
+        self.app.table.select("m1")
+        self.app.ack_selected()
+        self.wait_for_undelivered_events()
+        self.app.disconnect()
+        self.connect()
+        self.settle()
+        self.assertEqual("asteapta ACK", self.app.table.rows()[0][4])
+        self.assertNotIn("[ACK]", self.app.log.contents())
+
+    def test_late_subscribe_result_of_an_old_gateway_does_not_add_the_topic(self):
+        self.connect()
+        self.app.topic.set("sport")
+        self.app.subscribe()
+        self.wait_for_undelivered_events()
+        self.app.disconnect()
+        self.connect()
+        self.settle()
+        self.assertNotIn("sport", self.app.topics_text.get())
+        self.assertEqual("Topicuri sesiune: -", self.app.topics_text.get())
+
+    def test_queued_message_of_an_old_listener_is_dropped_after_reconnect(self):
+        self.app.auto_ack.set(False)
+        self.fake.servicer.listen_messages = [delivered("m1")]
+        self.connect()
+        self.wait_for_undelivered_events()
+        self.fake.servicer.listen_messages = []
+        self.app.connect()
+        pump(self.root, lambda: self.app.bar.status.get().startswith("Listen"), message="listen nou")
+        self.settle()
+        self.assertEqual([], self.app.table.rows())
+        self.assertEqual([], self.fake.servicer.acks)
+
+    def test_queued_listen_closed_of_an_old_listener_does_not_drop_the_new_connection(self):
+        self.connect()
+        self.fake.servicer.finish_listen.set()
+        self.wait_for_undelivered_events()
+        self.fake.servicer.finish_listen.clear()
+        self.app.connect()
+        pump(self.root, lambda: self.app.bar.status.get().startswith("Listen"), message="listen nou")
+        self.settle()
+        self.assertTrue(self.app.bar.status.get().startswith("Listen"))
+        self.assertEqual({"normal"}, self.action_states())
+
+    def test_topic_list_is_cleared_when_the_session_ends(self):
+        self.connect()
+        self.app.topic.set("sport")
+        self.app.subscribe()
+        pump(self.root, lambda: "sport" in self.app.topics_text.get(), message="abonat")
+        self.app.disconnect()
+        self.assertEqual("Topicuri sesiune: -", self.app.topics_text.get())
+        self.connect()
+        self.assertEqual("Topicuri sesiune: -", self.app.topics_text.get())
+
     def test_broker_going_away_returns_to_disconnected_and_allows_reconnect(self):
         self.connect()
         self.fake.kill()
@@ -120,10 +215,16 @@ class ReceiverAppTest(unittest.TestCase):
         self.fake.servicer.listen_messages = [delivered("m1")]
         self.connect()
         pump(self.root, lambda: len(self.app.table.rows()) == 1, message="primit")
-        self.fake.kill()
+
+        def failing_ack(subscriber_id, message_id):
+            raise FakeRpcError(grpc.StatusCode.NOT_FOUND, "necunoscut")
+
+        self.app._gateway.ack = failing_ack
         self.app.table.select("m1")
         self.app.ack_selected()
-        pump(self.root, lambda: "ACK esuat" in self.app.log.contents(), timeout=8, message="ack esuat")
+        pump(self.root, lambda: "ACK esuat" in self.app.log.contents(), message="ack esuat")
+        self.assertIn("NOT_FOUND", self.app.log.contents())
+        self.assertEqual("asteapta ACK", self.app.table.rows()[0][4])
 
 
 if __name__ == "__main__":
