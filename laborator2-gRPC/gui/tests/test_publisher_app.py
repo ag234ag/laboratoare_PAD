@@ -1,4 +1,3 @@
-import gc
 import time
 import unittest
 
@@ -6,17 +5,12 @@ import grpc
 
 from publisher_app import PublisherApp
 from tests.fake_broker import RunningFakeBroker
-from tests.support import make_root, pump, unused_port
+from tests.support import make_root, pump, release_on_cleanup, unused_port
 
 
 class PublisherAppTest(unittest.TestCase):
-    def release_widgets(self):
-        self.app = None
-        self.root = None
-        gc.collect()
-
     def setUp(self):
-        self.addCleanup(self.release_widgets)
+        release_on_cleanup(self, "app", "root")
         self.fake = RunningFakeBroker()
         self.fake.__enter__()
         self.addCleanup(self.fake.__exit__)

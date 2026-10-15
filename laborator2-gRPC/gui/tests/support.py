@@ -1,3 +1,4 @@
+import gc
 import socket
 import time
 import tkinter as tk
@@ -49,3 +50,12 @@ def pump(root, condition, timeout=5, message="conditia"):
             return
         time.sleep(0.02)
     raise AssertionError(f"{message} nu s-a indeplinit in {timeout}s")
+
+
+def release_on_cleanup(test_case, *attribute_names):
+    def release():
+        for name in attribute_names:
+            setattr(test_case, name, None)
+        gc.collect()
+
+    test_case.addCleanup(release)
