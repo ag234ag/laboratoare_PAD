@@ -98,8 +98,11 @@ class BrokerProcess:
             self._killer(self._process)
 
     def _read(self, process):
-        for line in process.stdout:
-            self._bus.post(CONSOLE_KIND, line.rstrip("\r\n"))
+        try:
+            for line in process.stdout:
+                self._bus.post(CONSOLE_KIND, line.rstrip("\r\n"))
+        finally:
+            process.stdout.close()
 
     def _wait(self, process, reader, done):
         code = process.wait()

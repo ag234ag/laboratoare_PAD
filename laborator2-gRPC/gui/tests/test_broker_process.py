@@ -41,6 +41,7 @@ class FakePopen:
 class BlockingStream:
     def __init__(self):
         self.release = threading.Event()
+        self.closed = False
 
     def __iter__(self):
         return self
@@ -48,6 +49,10 @@ class BlockingStream:
     def __next__(self):
         self.release.wait(30)
         raise StopIteration
+
+    def close(self):
+        self.release.wait(30)
+        self.closed = True
 
 
 class GatedBus(EventBus):
@@ -176,6 +181,32 @@ class BrokerProcessTest(unittest.TestCase):
         process.start(OPTIONS)
         self.assertEqual([("exited", 0)], collect(self.bus, ["exited"], timeout=6))
 
+    def test_stdout_is_closed_when_exited_is_observed(self):
+        process = self.make()
+        process.start(OPTIONS)
+        self.assertIn(("exited", 0), collect(self.bus, ["exited"]))
+        self.assertTrue(self.launched[0].stdout.closed)
+
+    def test_blocked_reader_closes_its_pipe_quietly_once_the_pipe_ends(self):
+        stream = BlockingStream()
+        self.addCleanup(stream.release.set)
+        errors = []
+
+        def popen(command, **kwargs):
+            process = FakePopen(command, **kwargs)
+            process.stdout = stream
+            return process
+
+        with mock.patch.object(threading, "excepthook", lambda args: errors.append(args.exc_value)):
+            process = self.make(popen=popen)
+            process.start(OPTIONS)
+            self.assertEqual([("exited", 0)], collect(self.bus, ["exited"], timeout=6))
+            self.assertTrue(wait_for(lambda: not process.running))
+            self.assertFalse(stream.closed)
+            stream.release.set()
+            self.assertTrue(wait_for(lambda: stream.closed))
+        self.assertEqual([], errors)
+
     def test_running_stays_true_until_exited_is_posted(self):
         bus = GatedBus()
         self.addCleanup(bus.gate.set)
@@ -292,15 +323,19 @@ class KillTreeTest(unittest.TestCase):
 class RealProcessTest(unittest.TestCase):
     def test_real_subprocess_output_is_streamed(self):
         bus = EventBus()
+        launched = []
 
         def popen(command, **kwargs):
             environment = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-            return subprocess.Popen([sys.executable, "-c", "print('salut'); print('ă')"], env=environment, **kwargs)
+            launched.append(subprocess.Popen([sys.executable, "-c", "print('salut'); print('ă')"], env=environment,
+                                             **kwargs))
+            return launched[0]
 
         process = BrokerProcess(bus, Path("."), Path("."), popen=popen, port_check=lambda port: False)
         process.start(OPTIONS)
         events = collect(bus, ["exited"], timeout=10)
         self.assertEqual([("console", "salut"), ("console", "ă"), ("exited", 0)], events)
+        self.assertTrue(launched[0].stdout.closed)
 
 
 if __name__ == "__main__":
