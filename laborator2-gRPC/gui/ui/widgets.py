@@ -55,6 +55,10 @@ class TableView(ttk.Frame):
             else:
                 self._tree.insert("", index, iid=key, values=self._values[key])
 
+    def clear(self):
+        self._tree.delete(*self._tree.get_children())
+        self._values.clear()
+
     def upsert(self, key, values):
         self._values[key] = tuple(str(value) for value in values)
         if self._tree.exists(key):

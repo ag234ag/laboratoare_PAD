@@ -32,6 +32,9 @@ class ReceivedMessages:
         self._items[delivered.message_id] = item
         return item
 
+    def clear(self):
+        self._items.clear()
+
     def mark_acked(self, message_id, duplicate):
         item = self._items.get(message_id)
         if item is None:

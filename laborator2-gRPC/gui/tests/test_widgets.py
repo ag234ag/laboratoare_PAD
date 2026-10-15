@@ -54,6 +54,16 @@ class TableViewTest(unittest.TestCase):
         self.assertEqual([("2", "y"), ("1", "x")], table.rows())
         self.assertEqual("a", table.selected_key())
 
+    def test_clear_removes_all_rows_and_selection(self):
+        table = self.make()
+        table.replace([("a", ("1", "x")), ("b", ("2", "y"))])
+        table.select("a")
+        table.clear()
+        self.assertEqual([], table.rows())
+        self.assertIsNone(table.selected_key())
+        table.upsert("a", ("3", "z"))
+        self.assertEqual([("3", "z")], table.rows())
+
     def test_numeric_looking_text_is_not_converted(self):
         table = self.make()
         table.upsert("k", ("007", "1e3"))

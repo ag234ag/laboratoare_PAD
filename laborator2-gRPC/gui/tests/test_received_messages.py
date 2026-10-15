@@ -25,6 +25,14 @@ class ReceivedMessagesTest(unittest.TestCase):
         self.assertEqual(rm.ACKED, messages.mark_acked("m1", duplicate=False).status)
         self.assertEqual(rm.ACKED_DUPLICATE, messages.mark_acked("m1", duplicate=True).status)
 
+    def test_clear_forgets_previous_deliveries(self):
+        messages = rm.ReceivedMessages()
+        messages.register(delivered())
+        messages.clear()
+        self.assertFalse(messages.register(delivered()).retransmission)
+        messages.clear()
+        self.assertIsNone(messages.mark_acked("m1", duplicate=False))
+
     def test_mark_acked_unknown_message_returns_none(self):
         self.assertIsNone(rm.ReceivedMessages().mark_acked("nope", duplicate=False))
 

@@ -22,6 +22,7 @@ class ReceiverApp:
         self._gateway = None
         self._listener = None
         self._active_id = None
+        self._previous_id = None
         self._received = ReceivedMessages()
         self._topics = set()
         root.title("Receiver gRPC")
@@ -34,7 +35,8 @@ class ReceiverApp:
         form = ttk.Frame(root)
         form.pack(fill="x", padx=6)
         ttk.Label(form, text="Subscriber ID").grid(row=0, column=0, sticky="w")
-        ttk.Entry(form, textvariable=self.subscriber_id, width=24).grid(row=0, column=1, sticky="w", padx=4, pady=2)
+        self.subscriber_entry = ttk.Entry(form, textvariable=self.subscriber_id, width=24)
+        self.subscriber_entry.grid(row=0, column=1, sticky="w", padx=4, pady=2)
         ttk.Label(form, text="Topic").grid(row=1, column=0, sticky="w")
         ttk.Entry(form, textvariable=self.topic, width=24).grid(row=1, column=1, sticky="w", padx=4, pady=2)
         buttons = ttk.Frame(root)
@@ -69,6 +71,11 @@ class ReceiverApp:
             return
         self._drop_connection()
         self._set_actions(False)
+        self.subscriber_entry.configure(state="disabled")
+        if subscriber_id != self._previous_id:
+            self._received.clear()
+            self.table.clear()
+        self._previous_id = subscriber_id
         gateway = BrokerGateway(host, port)
         self._gateway = gateway
         self._active_id = subscriber_id
@@ -80,6 +87,7 @@ class ReceiverApp:
         self.bar.set_connected(False)
         self.bar.set_status("Deconectat")
         self._set_actions(False)
+        self.subscriber_entry.configure(state="normal")
 
     def close(self):
         self._drop_connection()
@@ -135,6 +143,7 @@ class ReceiverApp:
             self._drop_connection()
             self.bar.set_connected(False)
             self.bar.set_status("Deconectat")
+            self.subscriber_entry.configure(state="normal")
             return
         self._listener = Listener(self._gateway, TaggedBus(self._bus, self._gateway))
         self._listener.start(self._active_id)
@@ -162,6 +171,7 @@ class ReceiverApp:
         self.bar.set_connected(False)
         self.bar.set_status("Deconectat")
         self._set_actions(False)
+        self.subscriber_entry.configure(state="normal")
 
     def _on_subscription(self, outcome):
         gateway, name, topic = outcome.context

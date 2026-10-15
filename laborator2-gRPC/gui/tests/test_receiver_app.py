@@ -204,6 +204,52 @@ class ReceiverAppTest(unittest.TestCase):
         self.connect()
         self.assertEqual("Topicuri sesiune: -", self.app.topics_text.get())
 
+    def id_entry_state(self):
+        return str(self.app.subscriber_entry.cget("state"))
+
+    def test_subscriber_id_entry_is_locked_while_connecting_and_connected(self):
+        self.assertEqual("normal", self.id_entry_state())
+        self.app.connect()
+        self.assertEqual("disabled", self.id_entry_state())
+        pump(self.root, lambda: self.app.bar.status.get().startswith("Listen"), message="listen")
+        self.assertEqual("disabled", self.id_entry_state())
+        self.app.disconnect()
+        self.assertEqual("normal", self.id_entry_state())
+
+    def test_subscriber_id_entry_is_unlocked_when_connect_fails(self):
+        self.fake.kill()
+        self.app.connect()
+        pump(self.root, lambda: self.app.bar.status.get() == "Deconectat", timeout=8, message="deconectat")
+        self.assertEqual("normal", self.id_entry_state())
+
+    def test_subscriber_id_entry_is_unlocked_when_the_broker_closes_the_stream(self):
+        self.connect()
+        self.fake.servicer.finish_listen.set()
+        pump(self.root, lambda: self.app.bar.status.get() == "Deconectat", message="deconectat")
+        self.assertEqual("normal", self.id_entry_state())
+
+    def test_reconnect_as_another_id_clears_the_table_and_forgets_old_deliveries(self):
+        self.fake.servicer.listen_messages = [delivered("m1")]
+        self.connect()
+        pump(self.root, lambda: self.app.table.rows() == [("m1", "sport", "salut", "1/3", "ACK trimis")], message="primit")
+        self.app.disconnect()
+        self.app.auto_ack.set(False)
+        self.app.subscriber_id.set("gui-other")
+        self.app.connect()
+        self.assertEqual([], self.app.table.rows())
+        pump(self.root, lambda: self.app.bar.status.get().startswith("Listen"), message="listen nou")
+        pump(self.root, lambda: self.app.table.rows() == [("m1", "sport", "salut", "1/3", "asteapta ACK")],
+             message="mesaj nou fara retransmisie")
+
+    def test_reconnect_with_the_same_id_keeps_the_table(self):
+        self.fake.servicer.listen_messages = [delivered("m1")]
+        self.connect()
+        pump(self.root, lambda: len(self.app.table.rows()) == 1, message="primit")
+        self.fake.servicer.listen_messages = []
+        self.app.disconnect()
+        self.app.connect()
+        self.assertEqual(1, len(self.app.table.rows()))
+
     def test_broker_going_away_returns_to_disconnected_and_allows_reconnect(self):
         self.connect()
         self.fake.kill()
