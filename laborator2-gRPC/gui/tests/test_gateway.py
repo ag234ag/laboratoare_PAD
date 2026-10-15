@@ -2,7 +2,7 @@ import unittest
 
 import grpc
 
-from core.gateway import UNAVAILABLE_TEXT, BrokerGateway, broker_pb2, describe_error
+from core.gateway import DEADLINE_TEXT, UNAVAILABLE_TEXT, BrokerGateway, broker_pb2, describe_error, format_target
 from tests.fake_broker import RunningFakeBroker
 from tests.support import FakeRpcError, unused_port
 
@@ -54,12 +54,30 @@ class DescribeErrorTest(unittest.TestCase):
     def test_unavailable_has_the_help_text(self):
         self.assertEqual(UNAVAILABLE_TEXT, describe_error(FakeRpcError(grpc.StatusCode.UNAVAILABLE)))
 
+    def test_deadline_exceeded_has_the_help_text(self):
+        self.assertEqual(DEADLINE_TEXT, describe_error(FakeRpcError(grpc.StatusCode.DEADLINE_EXCEEDED)))
+        self.assertEqual("Brokerul nu a raspuns in 5 secunde. Verifica host/IP, portul, firewall-ul si ca brokerul ruleaza.",
+                         DEADLINE_TEXT)
+
     def test_other_codes_show_name_and_details(self):
         self.assertEqual("NOT_FOUND - DELIVERY_NOT_FOUND",
                          describe_error(FakeRpcError(grpc.StatusCode.NOT_FOUND, "DELIVERY_NOT_FOUND")))
 
     def test_non_grpc_errors_use_their_message(self):
         self.assertEqual("boom", describe_error(RuntimeError("boom")))
+
+
+class FormatTargetTest(unittest.TestCase):
+    def test_hostname_and_ipv4_are_joined_with_the_port(self):
+        self.assertEqual("127.0.0.1:50051", format_target("127.0.0.1", 50051))
+        self.assertEqual("broker.local:50051", format_target("broker.local", 50051))
+
+    def test_ipv6_literal_is_bracketed(self):
+        self.assertEqual("[::1]:50051", format_target("::1", 50051))
+        self.assertEqual("[fe80::1]:6000", format_target("fe80::1", 6000))
+
+    def test_already_bracketed_host_is_not_bracketed_again(self):
+        self.assertEqual("[::1]:50051", format_target("[::1]", 50051))
 
 
 if __name__ == "__main__":

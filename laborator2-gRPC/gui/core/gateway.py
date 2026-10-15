@@ -7,6 +7,13 @@ broker_pb2, broker_pb2_grpc = stubs.load()
 CALL_TIMEOUT_SECONDS = 5
 DEFAULT_STATE_LIMIT = 100
 UNAVAILABLE_TEXT = "Broker indisponibil. Verifica host/IP, portul, firewall-ul si ca brokerul ruleaza."
+DEADLINE_TEXT = "Brokerul nu a raspuns in 5 secunde. Verifica host/IP, portul, firewall-ul si ca brokerul ruleaza."
+
+
+def format_target(host, port):
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"{host}:{port}"
 
 
 def describe_error(error):
@@ -14,12 +21,14 @@ def describe_error(error):
         return str(error)
     if error.code() == grpc.StatusCode.UNAVAILABLE:
         return UNAVAILABLE_TEXT
+    if error.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+        return DEADLINE_TEXT
     return f"{error.code().name} - {error.details()}"
 
 
 class BrokerGateway:
     def __init__(self, host, port):
-        self._channel = grpc.insecure_channel(f"{host}:{port}")
+        self._channel = grpc.insecure_channel(format_target(host, port))
         self._stub = broker_pb2_grpc.MessageBrokerStub(self._channel)
 
     def publish(self, message_id, topic, content):
