@@ -88,28 +88,32 @@ class GuiEndToEnd(unittest.TestCase):
         root.withdraw()
         self.clients = []
         self.timings = {}
-        broker = BrokerApp(root, LAB_DIR / "broker", LAB_DIR)
-        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
-            port = unused_port()
-            try:
-                self.run_lifecycle(root, broker, Path(folder) / "broker.db", port)
-            finally:
-                self.shutdown(root, broker, port)
-        print(f"\ndurate (s): {self.timings}", file=sys.stderr)
         broker = None
-        self.clients = None
-        gc.collect()
-        root.destroy()
-        root = None
-        gc.collect()
+        try:
+            broker = BrokerApp(root, LAB_DIR / "broker", LAB_DIR)
+            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
+                port = unused_port()
+                try:
+                    self.run_lifecycle(root, broker, Path(folder) / "broker.db", port)
+                finally:
+                    self.shutdown(root, broker, port)
+            print(f"\ndurate (s): {self.timings}", file=sys.stderr)
+        finally:
+            broker = None
+            self.clients = None
+            gc.collect()
+            root.destroy()
+            root = None
+            gc.collect()
 
     def run_lifecycle(self, root, broker, db, port):
+        listening = f"Listening on 0.0.0.0:{port}"
         broker.port.set(str(port))
         broker.storage.set("persistent")
         broker.db.set(str(db))
         broker.workers.set("4")
         tree = self.start_broker(root, broker, "start")
-        self.assertIn("Listening on", broker.console.contents())
+        self.assertEqual(1, broker.console.contents().count(listening))
         self.assertTrue(any(name.lower() == "broker.exe" for _, _, name in tree.values()), tree)
 
         began = time.monotonic()
@@ -124,7 +128,7 @@ class GuiEndToEnd(unittest.TestCase):
             pump(root, lambda r=receiver: r.bar.status.get() == "Deconectat", 20, "receiver deconectat la oprire")
 
         tree = self.start_broker(root, broker, "restart")
-        self.assertEqual(2, broker.console.contents().count("Listening on"))
+        self.assertEqual(2, broker.console.contents().count(listening))
 
         began = time.monotonic()
         killed = subprocess.run(["taskkill", "/PID", str(broker_pid(broker)), "/T", "/F"], capture_output=True)
@@ -150,13 +154,15 @@ class GuiEndToEnd(unittest.TestCase):
         pump(root, lambda: not survivors(tree), 10, f"arborele {sorted(tree)} oprit")
 
     def shutdown(self, root, broker, port):
-        for client in self.clients:
-            client.close()
-        broker.stop()
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline and port_in_use(port):
-            root.update()
-            time.sleep(0.1)
+        try:
+            broker.stop()
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline and port_in_use(port):
+                root.update()
+                time.sleep(0.1)
+        finally:
+            for client in self.clients:
+                client.close()
 
     def run_scenario(self, root, broker, db, port):
         receiver_a = ReceiverApp(tk.Toplevel(root), "127.0.0.1", port)
@@ -221,10 +227,8 @@ class GuiEndToEnd(unittest.TestCase):
         self.assertEqual(db_messages, gui_messages)
 
         accepted = {row[1] for row in history if row[3].startswith("OK")}
-        rejected = {row[1] for row in history if row[3] == "INVALID -> DLQ"}
         duplicates = [row[1] for row in history if row[3] == "DUPLICATE"]
         self.assertEqual(set(db_messages), accepted)
-        self.assertEqual(set(), rejected & set(db_messages))
         self.assertEqual(1, len(duplicates))
         self.assertEqual(("nimeni", "fara abonat", "PENDING"), db_messages[duplicates[0]])
 
@@ -242,11 +246,15 @@ class GuiEndToEnd(unittest.TestCase):
             received = {row[0] for row in receiver.table.rows()}
             self.assertEqual({m for m, s in gui_deliveries if s == subscriber_id}, received)
 
-        db_dlq = sorted((row[0] or "", row[1] or "", row[2] or "", row[4], str(row[5])) for row in oracle.dead_letters(db))
-        gui_dlq = sorted((row[1], row[2], row[3], row[4], row[5]) for row in broker.dead_letters_table.rows())
+        db_dlq = sorted((row[0] or "", row[1] or "", row[2] or "", row[3] or "", row[4], str(row[5]))
+                        for row in oracle.dead_letters(db))
+        gui_dlq = sorted((row[1], row[2], row[3], row[7], row[4], row[5]) for row in broker.dead_letters_table.rows())
         self.assertEqual(db_dlq, gui_dlq)
+        self.assertTrue(all(row[3] for row in db_dlq if not row[0]), db_dlq)
 
-        self.assertEqual(sorted(subscriptions(db)), sorted(broker.subscriptions_table.rows()))
+        db_subscriptions = subscriptions(db)
+        self.assertEqual({("gui-a", "sport"), ("gui-b", "sport")}, set(db_subscriptions))
+        self.assertEqual(sorted(db_subscriptions), sorted(broker.subscriptions_table.rows()))
         online = broker.online.get().split(": ", 1)[1].split(", ")
         self.assertEqual({"gui-a", "gui-b"}, set(online))
 

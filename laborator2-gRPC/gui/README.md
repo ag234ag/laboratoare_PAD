@@ -32,4 +32,4 @@ Din `gui/`:
 ..\.venv\Scripts\python -m unittest discover -s tests -t . -v
 ..\.venv\Scripts\python -m unittest discover -s e2e -t . -v
 ```
-Testele E2E pornesc brokerul real și compară tabelele afișate cu `broker.db`, citit direct prin `tests/e2e/oracle.py`. Verifică și ciclul Start, Stop, Start pe același port și oprirea brokerului din afara aplicației (arborele de procese și portul se eliberează).
+Testele E2E pornesc brokerul real și compară tabelele afișate cu `broker.db`, citit direct prin `tests/e2e/oracle.py`. Verifică și ciclul Start, Stop, Start pe același port și oprirea brokerului din afara aplicației (arborele de procese și portul se eliberează). Testul E2E (`gui/e2e`) rulează doar pe Windows, fiindcă folosește `taskkill` și tabela de procese Win32; pe alte sisteme este sărit.
