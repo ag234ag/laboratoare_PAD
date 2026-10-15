@@ -17,7 +17,7 @@ class LogView(ttk.Frame):
     def append(self, line):
         self._text.configure(state="normal")
         self._text.insert("end", f"{time.strftime('%H:%M:%S')}  {line}\n")
-        overflow = int(self._text.index("end-1c").split(".")[0]) - self.MAX_LINES
+        overflow = int(self._text.index("end-1c").split(".")[0]) - 1 - self.MAX_LINES
         if overflow > 0:
             self._text.delete("1.0", f"{overflow + 1}.0")
         self._text.configure(state="disabled")

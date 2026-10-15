@@ -14,12 +14,15 @@ class LogViewTest(unittest.TestCase):
     def test_old_lines_are_trimmed(self):
         root = make_root(self)
         log = LogView(root)
+        self.addCleanup(setattr, LogView, "MAX_LINES", LogView.MAX_LINES)
         LogView.MAX_LINES = 5
-        self.addCleanup(setattr, LogView, "MAX_LINES", 2000)
         for index in range(20):
             log.append(f"linia {index}")
-        self.assertNotIn("linia 0\n", log.contents())
-        self.assertIn("linia 19", log.contents())
+        lines = log.contents().splitlines()
+        self.assertEqual(5, len(lines))
+        self.assertTrue(lines[0].endswith("linia 15"))
+        self.assertTrue(lines[-1].endswith("linia 19"))
+        self.assertNotIn("linia 14", log.contents())
 
 
 class TableViewTest(unittest.TestCase):
@@ -42,6 +45,14 @@ class TableViewTest(unittest.TestCase):
         table.replace([("b", ("2", "yy")), ("c", ("3", "z"))])
         self.assertEqual("b", table.selected_key())
         self.assertEqual([("2", "yy"), ("3", "z")], table.rows())
+
+    def test_replace_reorders_existing_rows_and_keeps_selection(self):
+        table = self.make()
+        table.replace([("a", ("1", "x")), ("b", ("2", "y"))])
+        table.select("a")
+        table.replace([("b", ("2", "y")), ("a", ("1", "x"))])
+        self.assertEqual([("2", "y"), ("1", "x")], table.rows())
+        self.assertEqual("a", table.selected_key())
 
     def test_numeric_looking_text_is_not_converted(self):
         table = self.make()
@@ -76,6 +87,11 @@ class ConnectionBarTest(unittest.TestCase):
                 bar.port.set(port)
                 with self.assertRaises(ValueError):
                     bar.address()
+
+    def test_initial_state_is_disconnected(self):
+        bar = self.make()
+        self.assertEqual("normal", str(bar.connect_button.cget("state")))
+        self.assertEqual("disabled", str(bar.disconnect_button.cget("state")))
 
     def test_set_connected_toggles_buttons(self):
         bar = self.make()
