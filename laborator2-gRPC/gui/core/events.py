@@ -51,13 +51,22 @@ class TkPump:
         self._bus = bus
         self._handler = handler
         self._interval_ms = interval_ms
+        self._after_id = None
+        self._stopped = False
 
     def start(self):
         self._tick()
+
+    def stop(self):
+        self._stopped = True
+        if self._after_id is not None:
+            self._root.after_cancel(self._after_id)
+            self._after_id = None
 
     def _tick(self):
         try:
             for kind, payload in self._bus.drain():
                 self._handler(kind, payload)
         finally:
-            self._root.after(self._interval_ms, self._tick)
+            if not self._stopped:
+                self._after_id = self._root.after(self._interval_ms, self._tick)
