@@ -1,3 +1,4 @@
+import threading
 import time
 import unittest
 
@@ -16,6 +17,43 @@ def wait_for(bus, kind, timeout=3):
                 return item[1]
         time.sleep(0.01)
     raise AssertionError(f"niciun eveniment {kind}")
+
+
+class GatedBus(EventBus):
+    def __init__(self):
+        super().__init__()
+        self.entered = threading.Event()
+        self.gate = threading.Event()
+
+    def post(self, kind, payload=None):
+        self.entered.set()
+        self.gate.wait(5)
+        super().post(kind, payload)
+
+
+class StaticGateway:
+    def get_state(self, limit):
+        return broker_pb2.BrokerState(storage_mode="transient")
+
+
+class StatePollerRaceTest(unittest.TestCase):
+    def test_stop_waits_for_a_post_already_in_flight_and_nothing_follows(self):
+        bus = GatedBus()
+        poller = StatePoller(StaticGateway(), bus, interval=0.01)
+        self.addCleanup(poller.stop)
+        poller.start()
+        self.assertTrue(bus.entered.wait(3))
+        stopper = threading.Thread(target=poller.stop)
+        stopper.start()
+        stopper.join(0.3)
+        self.assertTrue(stopper.is_alive())
+        bus.gate.set()
+        stopper.join(3)
+        self.assertFalse(stopper.is_alive())
+        events = bus.drain()
+        time.sleep(0.2)
+        self.assertEqual(1, len(events))
+        self.assertEqual([], bus.drain())
 
 
 class StatePollerTest(unittest.TestCase):

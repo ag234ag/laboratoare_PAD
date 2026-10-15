@@ -14,25 +14,31 @@ class StatePoller:
         self._interval = interval
         self._limit = limit
         self._stopped = None
+        self._lock = threading.Lock()
 
     def start(self):
         self.stop()
         stopped = threading.Event()
-        self._stopped = stopped
+        with self._lock:
+            self._stopped = stopped
         threading.Thread(target=self._run, args=(stopped,), daemon=True).start()
 
     def stop(self):
-        if self._stopped is not None:
-            self._stopped.set()
+        with self._lock:
+            if self._stopped is not None:
+                self._stopped.set()
 
     def _run(self, stopped):
         while not stopped.is_set():
             try:
                 state = self._gateway.get_state(self._limit)
             except Exception as error:
-                if not stopped.is_set():
-                    self._bus.post(STATE_ERROR_KIND, describe_error(error))
+                self._post_unless_stopped(stopped, STATE_ERROR_KIND, describe_error(error))
             else:
-                if not stopped.is_set():
-                    self._bus.post(STATE_KIND, state)
+                self._post_unless_stopped(stopped, STATE_KIND, state)
             stopped.wait(self._interval)
+
+    def _post_unless_stopped(self, stopped, kind, payload):
+        with self._lock:
+            if not stopped.is_set():
+                self._bus.post(kind, payload)

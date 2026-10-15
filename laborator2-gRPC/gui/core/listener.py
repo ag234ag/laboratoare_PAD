@@ -7,6 +7,7 @@ from core.gateway import UNAVAILABLE_TEXT
 
 MESSAGE_KIND = "message"
 CLOSED_KIND = "listen_closed"
+REPLACED_CODE = "ABORTED"
 REPLACED_DETAILS = "SESSION_REPLACED"
 
 
@@ -17,7 +18,7 @@ class ListenClosed:
 
     @property
     def replaced(self):
-        return self.details == REPLACED_DETAILS
+        return self.code == REPLACED_CODE and self.details == REPLACED_DETAILS
 
     def text(self):
         if self.replaced:
@@ -32,27 +33,39 @@ class Listener:
         self._gateway = gateway
         self._bus = bus
         self._call = None
+        self._lock = threading.Lock()
 
     def start(self, subscriber_id):
         self.stop()
         call = self._gateway.listen(subscriber_id)
-        self._call = call
+        with self._lock:
+            self._call = call
         threading.Thread(target=self._run, args=(call,), daemon=True).start()
 
     def stop(self):
-        call, self._call = self._call, None
+        with self._lock:
+            call, self._call = self._call, None
         if call is not None:
             call.cancel()
 
     def _run(self, call):
         try:
             for message in call:
-                if self._call is not call:
+                if not self._post_if_current(call, MESSAGE_KIND, message):
                     return
-                self._bus.post(MESSAGE_KIND, message)
             closed = ListenClosed("OK", "stream inchis de broker")
         except grpc.RpcError as error:
             closed = ListenClosed(error.code().name, error.details() or "")
-        if self._call is call:
-            self._call = None
-            self._bus.post(CLOSED_KIND, closed)
+        except Exception as error:
+            closed = ListenClosed("INTERNAL", str(error))
+        with self._lock:
+            if self._call is call:
+                self._call = None
+                self._bus.post(CLOSED_KIND, closed)
+
+    def _post_if_current(self, call, kind, payload):
+        with self._lock:
+            if self._call is not call:
+                return False
+            self._bus.post(kind, payload)
+            return True
