@@ -8,6 +8,8 @@ import time
 
 CONSOLE_KIND = "console"
 EXITED_KIND = "exited"
+TASKKILL_ACCEPTED = (0, 128)
+READER_JOIN_SECONDS = 2
 
 
 class PortInUseError(RuntimeError):
@@ -30,9 +32,12 @@ def kill_tree(process):
     if process.poll() is not None:
         return
     if sys.platform == "win32":
-        subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True)
+        result = subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True)
+        if result.returncode not in TASKKILL_ACCEPTED:
+            output = (result.stdout + result.stderr).decode(errors="replace").strip()
+            raise RuntimeError(f"taskkill a esuat cu codul {result.returncode}: {output}")
     else:
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        os.killpg(process.pid, signal.SIGTERM)
 
 
 def wait_until_ready(ping, alive, timeout=240, interval=0.5, clock=time.monotonic, sleep=time.sleep):
@@ -58,10 +63,11 @@ class BrokerProcess:
         self._killer = killer
         self._port_check = port_check
         self._process = None
+        self._done = threading.Event()
 
     @property
     def running(self):
-        return self._process is not None and self._process.poll() is None
+        return self._process is not None and not self._done.is_set()
 
     def start(self, options):
         if self.running:
@@ -80,14 +86,23 @@ class BrokerProcess:
             bufsize=1,
             **extra,
         )
+        done = threading.Event()
         self._process = process
-        threading.Thread(target=self._pump, args=(process,), daemon=True).start()
+        self._done = done
+        reader = threading.Thread(target=self._read, args=(process,), daemon=True)
+        reader.start()
+        threading.Thread(target=self._wait, args=(process, reader, done), daemon=True).start()
 
     def stop(self):
         if self._process is not None:
             self._killer(self._process)
 
-    def _pump(self, process):
+    def _read(self, process):
         for line in process.stdout:
-            self._bus.post(CONSOLE_KIND, line.rstrip())
-        self._bus.post(EXITED_KIND, process.wait())
+            self._bus.post(CONSOLE_KIND, line.rstrip("\r\n"))
+
+    def _wait(self, process, reader, done):
+        code = process.wait()
+        reader.join(READER_JOIN_SECONDS)
+        self._bus.post(EXITED_KIND, code)
+        done.set()

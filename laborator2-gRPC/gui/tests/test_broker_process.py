@@ -7,9 +7,12 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from core import broker_process
 
 from core.broker_options import BrokerOptions
-from core.broker_process import (BrokerProcess, PortInUseError, build_command, port_in_use,
+from core.broker_process import (BrokerProcess, PortInUseError, build_command, kill_tree, port_in_use,
                                  wait_until_ready)
 from core.events import EventBus
 from tests.support import unused_port
@@ -33,6 +36,52 @@ class FakePopen:
     def wait(self):
         self.finished.wait(5)
         return 0
+
+
+class BlockingStream:
+    def __init__(self):
+        self.release = threading.Event()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        self.release.wait(30)
+        raise StopIteration
+
+
+class GatedBus(EventBus):
+    def __init__(self):
+        super().__init__()
+        self.gate = threading.Event()
+        self.reached = threading.Event()
+
+    def post(self, kind, payload):
+        if kind == "exited":
+            self.reached.set()
+            self.gate.wait(5)
+        super().post(kind, payload)
+
+
+def wait_for(condition, timeout=5):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return True
+        time.sleep(0.01)
+    return condition()
+
+
+def pid_alive(pid):
+    if sys.platform == "win32":
+        output = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True,
+                                errors="replace").stdout
+        return str(pid) in output.split()
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
 
 
 def collect(bus, kinds, timeout=2):
@@ -114,6 +163,44 @@ class BrokerProcessTest(unittest.TestCase):
     def test_stop_without_start_is_harmless(self):
         self.make().stop()
 
+    def test_exited_is_posted_even_when_the_pipe_never_closes(self):
+        stream = BlockingStream()
+        self.addCleanup(stream.release.set)
+
+        def popen(command, **kwargs):
+            process = FakePopen(command, **kwargs)
+            process.stdout = stream
+            return process
+
+        process = self.make(popen=popen)
+        process.start(OPTIONS)
+        self.assertEqual([("exited", 0)], collect(self.bus, ["exited"], timeout=6))
+
+    def test_running_stays_true_until_exited_is_posted(self):
+        bus = GatedBus()
+        self.addCleanup(bus.gate.set)
+        process = BrokerProcess(bus, Path("C:/lab/broker"), Path("C:/lab"),
+                                popen=lambda command, **kwargs: FakePopen(command, **kwargs),
+                                port_check=lambda port: False)
+        process.start(OPTIONS)
+        self.assertTrue(bus.reached.wait(5))
+        self.assertTrue(process.running)
+        with self.assertRaises(RuntimeError):
+            process.start(OPTIONS)
+        bus.gate.set()
+        self.assertTrue(wait_for(lambda: not process.running))
+        self.assertIn(("exited", 0), bus.drain())
+
+    def test_console_lines_keep_leading_and_trailing_spaces(self):
+        def popen(command, **kwargs):
+            process = FakePopen(command, **kwargs)
+            process.stdout = io.StringIO("  indentat  \r\n")
+            return process
+
+        process = self.make(popen=popen)
+        process.start(OPTIONS)
+        self.assertEqual([("console", "  indentat  "), ("exited", 0)], collect(self.bus, ["exited"]))
+
 
 class WaitUntilReadyTest(unittest.TestCase):
     def test_returns_true_after_failed_pings(self):
@@ -143,6 +230,63 @@ class WaitUntilReadyTest(unittest.TestCase):
             raise ConnectionError()
 
         self.assertFalse(wait_until_ready(ping, lambda: True, timeout=2, interval=0.5, clock=clock, sleep=sleep))
+
+
+class KillTreeTest(unittest.TestCase):
+    def kill_with_taskkill_result(self, returncode, stdout=b"", stderr=b""):
+        process = mock.Mock()
+        process.poll.return_value = None
+        process.pid = 77
+        result = subprocess.CompletedProcess([], returncode, stdout, stderr)
+        with mock.patch.object(broker_process.sys, "platform", "win32"),                 mock.patch.object(broker_process.subprocess, "run", return_value=result) as run:
+            kill_tree(process)
+        return run
+
+    def test_taskkill_is_called_for_the_whole_tree(self):
+        run = self.kill_with_taskkill_result(0)
+        self.assertEqual(["taskkill", "/PID", "77", "/T", "/F"], run.call_args.args[0])
+
+    def test_process_not_found_is_accepted(self):
+        self.kill_with_taskkill_result(128)
+
+    def test_other_taskkill_failures_raise_with_code_and_output(self):
+        with self.assertRaises(RuntimeError) as context:
+            self.kill_with_taskkill_result(1, stderr="Acces refuzat".encode())
+        self.assertIn("1", str(context.exception))
+        self.assertIn("Acces refuzat", str(context.exception))
+
+    def test_already_finished_process_is_left_alone(self):
+        process = mock.Mock()
+        process.poll.return_value = 0
+        with mock.patch.object(broker_process.subprocess, "run") as run:
+            kill_tree(process)
+        run.assert_not_called()
+
+    def test_real_process_tree_is_killed(self):
+        script = ("import subprocess, sys, time\n"
+                  "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+                  "print(child.pid, flush=True)\n"
+                  "time.sleep(60)\n")
+        extra = {} if sys.platform == "win32" else {"start_new_session": True}
+        parent = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.PIPE, text=True, **extra)
+        child_pid = None
+
+        def cleanup():
+            for pid in (parent.pid, child_pid):
+                if pid is not None and pid_alive(pid):
+                    if sys.platform == "win32":
+                        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+                    else:
+                        os.kill(pid, 9)
+            parent.wait(10)
+            parent.stdout.close()
+
+        self.addCleanup(cleanup)
+        child_pid = int(parent.stdout.readline())
+        self.assertTrue(pid_alive(child_pid))
+        kill_tree(parent)
+        parent.wait(5)
+        self.assertTrue(wait_for(lambda: not pid_alive(parent.pid) and not pid_alive(child_pid)))
 
 
 class RealProcessTest(unittest.TestCase):
