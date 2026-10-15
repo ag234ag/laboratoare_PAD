@@ -160,6 +160,8 @@ class GuiEndToEnd(unittest.TestCase):
             while time.monotonic() < deadline and port_in_use(port):
                 root.update()
                 time.sleep(0.1)
+            self.assertFalse(port_in_use(port),
+                             f"portul {port} ramane ocupat dupa oprire; consola brokerului: {broker.console.contents()[-500:]}")
         finally:
             for client in self.clients:
                 client.close()

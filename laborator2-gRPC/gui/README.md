@@ -14,6 +14,8 @@ python -m venv .venv
 
 `--host` implicit `127.0.0.1`, `--port` implicit `50051`. Fiecare aplicație poate rula pe alt calculator; stub-urile gRPC se generează automat în `gui/generated` din `proto/broker.proto`.
 
+Pentru conectarea de pe alt calculator, folosește adresele LAN afișate de broker la pornire („clients on other computers can connect to ...") și regula de firewall din secțiunea „Rulare pe mai multe calculatoare" din `laborator2-gRPC/README.md`.
+
 ## Broker
 Câmpuri port, storage, db, workers. **Start** rulează `dotnet run --project broker -c Release -- ...` (prima pornire compilează). Consola brokerului apare în fereastră; după `Ping` statusul devine `Running` și tabelele Messages, Deliveries, DeadLetters, Subscriptions se reîmprospătează la 1 s prin `GetState`. **Stop** (sau închiderea ferestrei) oprește tot arborele de procese.
 
