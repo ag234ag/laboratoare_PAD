@@ -55,7 +55,12 @@ class TkPump:
         self._stopped = False
 
     def start(self):
+        self._root.bind("<Destroy>", self._on_destroy, add="+")
         self._tick()
+
+    def _on_destroy(self, event):
+        if event.widget is self._root:
+            self.stop()
 
     def stop(self):
         self._stopped = True

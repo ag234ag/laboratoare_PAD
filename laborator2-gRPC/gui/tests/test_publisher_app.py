@@ -1,3 +1,5 @@
+import gc
+import time
 import unittest
 
 import grpc
@@ -8,7 +10,13 @@ from tests.support import make_root, pump, unused_port
 
 
 class PublisherAppTest(unittest.TestCase):
+    def release_widgets(self):
+        self.app = None
+        self.root = None
+        gc.collect()
+
     def setUp(self):
+        self.addCleanup(self.release_widgets)
         self.fake = RunningFakeBroker()
         self.fake.__enter__()
         self.addCleanup(self.fake.__exit__)
@@ -80,12 +88,59 @@ class PublisherAppTest(unittest.TestCase):
         self.app.publish()
         self.assertIn("Nu esti conectat", self.app.log.contents())
 
+    def spy_on_connect(self):
+        seen = []
+        original = self.app._on_connect
+
+        def spy(outcome):
+            original(outcome)
+            seen.append((outcome.ok, self.snapshot()))
+
+        self.app._on_connect = spy
+        self.addCleanup(vars(self.app).pop, "_on_connect")
+        return seen
+
+    def snapshot(self):
+        return {
+            "status": self.app.bar.status.get(),
+            "connect": str(self.app.bar.connect_button.cget("state")),
+            "disconnect": str(self.app.bar.disconnect_button.cget("state")),
+            "actions": {str(button.cget("state")) for button in self.app._actions},
+        }
+
+    def wait_for_undelivered_result(self):
+        deadline = time.monotonic() + 5
+        while self.app._bus._queue.qsize() < 1 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(1, self.app._bus._queue.qsize())
+
     def test_late_connect_result_of_an_old_gateway_is_ignored(self):
+        seen = self.spy_on_connect()
         self.app.connect()
+        self.wait_for_undelivered_result()
         self.app.disconnect()
-        for _ in range(20):
-            self.root.update()
-        self.assertEqual("Deconectat", self.app.bar.status.get())
+        pump(self.root, lambda: len(seen) == 1, message="rezultat vechi")
+        ok, state = seen[0]
+        self.assertTrue(ok)
+        self.assertEqual("Deconectat", state["status"])
+        self.assertEqual("normal", state["connect"])
+        self.assertEqual("disabled", state["disconnect"])
+        self.assertEqual({"disabled"}, state["actions"])
+
+    def test_only_the_latest_gateway_connect_result_takes_effect(self):
+        seen = self.spy_on_connect()
+        self.app.connect()
+        self.wait_for_undelivered_result()
+        self.app.connect()
+        pump(self.root, lambda: len(seen) == 2, message="ambele rezultate")
+        stale, latest = seen
+        self.assertEqual("Se conecteaza...", stale[1]["status"])
+        self.assertEqual("normal", stale[1]["connect"])
+        self.assertEqual({"disabled"}, stale[1]["actions"])
+        self.assertTrue(latest[0])
+        self.assertIn("Conectat", latest[1]["status"])
+        self.assertEqual("disabled", latest[1]["connect"])
+        self.assertEqual({"normal"}, latest[1]["actions"])
 
     def test_ping_logs_pong(self):
         self.connect()

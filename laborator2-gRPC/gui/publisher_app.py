@@ -48,9 +48,7 @@ class PublisherApp:
         self.log = LogView(root, height=6)
         self.log.pack(fill="x", padx=6, pady=4)
         self._set_actions(False)
-        self._pump = TkPump(root, self._bus, self._handle)
-        self._pump.start()
-        root.bind("<Destroy>", self._on_destroy)
+        TkPump(root, self._bus, self._handle).start()
         root.protocol("WM_DELETE_WINDOW", self.close)
 
     def connect(self):
@@ -140,10 +138,6 @@ class PublisherApp:
             self.log.append(f"PONG - ora brokerului {outcome.value.server_time_utc}, storage {outcome.value.storage_mode}")
         else:
             self.log.append(describe_error(outcome.error))
-
-    def _on_destroy(self, event):
-        if event.widget is self._root:
-            self._pump.stop()
 
     def _drop_gateway(self):
         gateway, self._gateway = self._gateway, None
