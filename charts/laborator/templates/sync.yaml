@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sync-service
+  labels:
+    {{- include "laborator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: sync
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: sync
+    spec:
+      containers:
+        - name: sync
+          image: {{ .Values.sync.image | quote }}
+          imagePullPolicy: {{ .Values.sync.imagePullPolicy }}
+          env:
+            - name: DATA_HOUSES
+              value: {{ include "laborator.houseIdsJson" . | quote }}
+            - name: MONGO_USER
+              value: root
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "laborator.name" . }}-credentials
+                  key: mongo-root-password
+            - name: REDIS_URL
+              value: redis://redis:6379
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "laborator.name" . }}-credentials
+                  key: rabbit-user
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "laborator.name" . }}-credentials
+                  key: rabbit-password
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq:5672

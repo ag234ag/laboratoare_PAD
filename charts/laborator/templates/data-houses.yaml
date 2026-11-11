@@ -1,0 +1,160 @@
+{{- range .Values.dataHouses }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-{{ .id }}
+  labels:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: mongodb
+    lab.data-house: {{ .id | quote }}
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: mongodb
+    lab.data-house: {{ .id | quote }}
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: mongodb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo-{{ .id }}
+  labels:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: mongodb
+    lab.data-house: {{ .id | quote }}
+spec:
+  serviceName: mongo-{{ .id }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: mongodb
+      lab.data-house: {{ .id | quote }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/component: mongodb
+        lab.data-house: {{ .id | quote }}
+    spec:
+      containers:
+        - name: mongodb
+          image: {{ $.Values.mongodb.image | quote }}
+          args: ["--bind_ip_all"]
+          ports:
+            - name: mongodb
+              containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: root
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "laborator.name" $ }}-credentials
+                  key: mongo-root-password
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mongosh --quiet --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval 'db.adminCommand({ping:1}).ok'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ $.Values.mongodb.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-{{ .id }}
+  labels:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: api
+    lab.data-house: {{ .id | quote }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: api
+    lab.data-house: {{ .id | quote }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-{{ .id }}
+  labels:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: api
+    lab.data-house: {{ .id | quote }}
+spec:
+  replicas: {{ $.Values.api.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: api
+      lab.data-house: {{ .id | quote }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/component: api
+        lab.data-house: {{ .id | quote }}
+    spec:
+      containers:
+        - name: api
+          image: {{ $.Values.api.image | quote }}
+          imagePullPolicy: {{ $.Values.api.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: HOUSE_ID
+              value: {{ .id | quote }}
+            - name: MONGO_HOST
+              value: mongo-{{ .id }}
+            - name: MONGO_USER
+              value: root
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "laborator.name" $ }}-credentials
+                  key: mongo-root-password
+            - name: REDIS_URL
+              value: redis://redis:6379
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "laborator.name" $ }}-credentials
+                  key: rabbit-user
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "laborator.name" $ }}-credentials
+                  key: rabbit-password
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq:5672
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+{{- end }}

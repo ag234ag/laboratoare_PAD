@@ -1,0 +1,12 @@
+{
+  "name": "lab-sync-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node src/index.js" },
+  "dependencies": {
+    "amqplib": "^0.10.5",
+    "mongodb": "^6.12.0",
+    "redis": "^4.7.0"
+  }
+}

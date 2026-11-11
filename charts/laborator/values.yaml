@@ -1,0 +1,35 @@
+dataHouses:
+  - id: house-1
+  - id: house-2
+
+api:
+  image: pad-api:0.1.0
+  imagePullPolicy: IfNotPresent
+  replicas: 1
+
+sync:
+  image: pad-sync:0.1.0
+  imagePullPolicy: IfNotPresent
+
+gateway:
+  image: nginx:1.27-alpine
+  replicas: 1
+  nodePort: 30080
+
+mongodb:
+  image: mongo:7.0
+  storage: 1Gi
+
+redis:
+  image: redis:7.4-alpine
+
+rabbitmq:
+  image: rabbitmq:4-management-alpine
+  storage: 1Gi
+
+security:
+  # Furnizați cheia prin --set-string sau printr-un fișier local de valori.
+  apiKey: ""
+  mongoRootPassword: local-mongo-password
+  rabbitUser: lab
+  rabbitPassword: local-rabbit-password
