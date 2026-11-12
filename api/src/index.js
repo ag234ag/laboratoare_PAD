@@ -3,6 +3,8 @@ import amqp from 'amqplib';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 import { MongoClient, ObjectId } from 'mongodb';
 import { createClient } from 'redis';
+import swaggerUi from 'swagger-ui-express';
+import openApiDocument from './openapi.js';
 
 const port = Number(process.env.PORT || 3000);
 const houseId = process.env.HOUSE_ID || 'house-1';
@@ -94,13 +96,23 @@ function publishChange(req, operation, document) {
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use(express.raw({ type: ['application/xml', 'text/xml'], limit: '1mb' }));
+app.use((_req, res, next) => {
+  res.setHeader('X-API-Pod', process.env.HOSTNAME || 'local');
+  next();
+});
 
 app.get('/healthz', (_req, res) => res.status(ready ? 200 : 503).json({ ready, houseId }));
+app.get('/openapi.json', (_req, res) => res.json(openApiDocument));
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument, { explorer: true }));
 
 app.get('/books', async (req, res, next) => {
   try {
     const cached = await redis.get(cacheKey('list'));
-    if (cached) return sendResponse(req, res, 200, { books: JSON.parse(cached) });
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      return sendResponse(req, res, 200, { books: JSON.parse(cached) });
+    }
+    res.setHeader('X-Cache', 'MISS');
     const documents = await books.find({ _deleted: { $ne: true } }).toArray();
     const result = documents.map(asPublicBook);
     await redis.set(cacheKey('list'), JSON.stringify(result), { EX: 30 });
@@ -113,7 +125,11 @@ app.get('/books/:id', async (req, res, next) => {
     if (!ObjectId.isValid(req.params.id)) return sendResponse(req, res, 400, { error: 'Invalid book id' });
     const key = cacheKey(req.params.id);
     const cached = await redis.get(key);
-    if (cached) return sendResponse(req, res, 200, JSON.parse(cached));
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      return sendResponse(req, res, 200, JSON.parse(cached));
+    }
+    res.setHeader('X-Cache', 'MISS');
     const document = await books.findOne({ _id: new ObjectId(req.params.id), _deleted: { $ne: true } });
     if (!document) return sendResponse(req, res, 404, { error: 'Book not found' });
     const result = asPublicBook(document);

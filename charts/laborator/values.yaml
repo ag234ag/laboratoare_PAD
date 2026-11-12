@@ -1,6 +1,7 @@
 dataHouses:
   - id: house-1
   - id: house-2
+  - id: house-3
 
 api:
   image: pad-api:0.1.0

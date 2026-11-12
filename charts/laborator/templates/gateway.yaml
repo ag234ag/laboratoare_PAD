@@ -20,9 +20,19 @@ data:
         access_log off;
         return 200 "ok\n";
       }
+      location = /docs {
+        return 301 /docs/;
+      }
+      location ^~ /docs/ {
+        proxy_pass http://api-{{ (index $.Values.dataHouses 0).id }}.{{ $.Release.Namespace }}.svc.cluster.local:3000;
+      }
+      location = /openapi.json {
+        proxy_pass http://api-{{ (index $.Values.dataHouses 0).id }}.{{ $.Release.Namespace }}.svc.cluster.local:3000/openapi.json;
+      }
       location / {
         if ($api_key_valid = 0) { return 401; }
         if ($api_upstream = "") { return 400; }
+        proxy_set_header X-API-Key "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
