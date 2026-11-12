@@ -233,6 +233,19 @@ kubectl exec -n laborator deployment/redis -- \
 
 Pentru a demonstra invalidarea, fă `GET` pe o carte ca să obții `X-Cache: HIT`, apoi modific-o prin `PUT` sau `PATCH`. Cheia ei și cheia listei din house-ul sursă sunt șterse. După sincronizare, cache-ul este invalidat și în celelalte house-uri. Următorul GET va întoarce `X-Cache: MISS`.
 
+### Modificarea TTL-ului
+
+TTL-urile sunt în secunde și sunt definite în codul API: lista în [api/src/index.js](api/src/index.js) folosește `EX: 30`, iar o carte individuală folosește `EX: 60`. Schimbă aceste numere cu durata dorită. TTL-ul expiră doar copia din Redis; documentele originale rămân în MongoDB. Valorile se aplică tuturor house-urilor, deoarece folosesc aceeași imagine API.
+
+După modificarea codului, reconstruiește imaginea și repornește podurile API:
+
+```bash
+minikube image build -t pad-api:0.1.0 ./api
+kubectl rollout restart deployment/api-house-1 deployment/api-house-2 -n laborator
+kubectl rollout status deployment/api-house-1 -n laborator
+kubectl rollout status deployment/api-house-2 -n laborator
+```
+
 ## 8. Demonstrarea priorității
 
 Trimite cereri CRUD cu `X-Priority: normal`, apoi cu `X-Priority: high`. API-ul mapează valorile la prioritățile RabbitMQ `5` și `10`; coada `sync.events` este declarată cu prioritate maximă `10`, iar sync service consumă un mesaj pe rând.
